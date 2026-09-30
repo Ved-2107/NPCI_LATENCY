@@ -21,7 +21,7 @@ document.querySelectorAll('.nav-link').forEach(btn => {
   });
 });
 
-$('.mobile-menu-btn').addEventListener('click', () => {
+document.querySelector('.mobile-menu-btn').addEventListener('click', () => {
   document.querySelector('.primary-nav').classList.toggle('open');
 });
 
@@ -57,6 +57,14 @@ async function init() {
     $('f-mode').previousElementSibling.style.background = "var(--err-txt)";
   }
 }
+
+function debounce(f, ms) { let t; return ()=> { clearTimeout(t); t=setTimeout(f,ms); }; }
+
+$('amount').addEventListener('input', debounce(() => {
+  if (document.getElementById('panel-2').classList.contains('active')) {
+    fetchQuote();
+  }
+}, 500));
 
 // Wizard Logic
 function wizardNext(step) {
