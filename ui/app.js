@@ -11,8 +11,21 @@ document.querySelectorAll('.nav-link').forEach(btn => {
     $(`tab-${tabId}`).classList.add('active');
     $('breadcrumb').innerText = `Home / ${e.target.innerText}`;
     
+    // Reset wizard if going to Send tab
+    if (tabId === 'send') {
+      wizardNext(1);
+      $('amount').value = '1000';
+      $('confirm-check').checked = false;
+      $('btn-submit').disabled = false;
+      $('btn-submit').innerText = 'Submit Transfer';
+    }
+    
     // Lazy load data based on tab
-    if (tabId === 'track') loadTransferList();
+    if (tabId === 'track') {
+      if (!document.getElementById('track-detail-view').style.display || document.getElementById('track-detail-view').style.display === 'none') {
+        loadTransferList();
+      }
+    }
     if (tabId === 'compliance') loadComplianceDesk();
     if (tabId === 'insights') loadInsights();
     
