@@ -185,3 +185,72 @@ class MemoryLedger:
     def GetRemittanceHistory(self, rid):
         return self.history.get(rid, [])
 
+
+class DrunixLedger:
+    """Calls the deployed `remit` chaincode through the peer CLI.
+    Per-org env files (KEY=VALUE lines) live in DRUNIX_ORG_ENV_DIR as org1.env / org2.env and must set
+    CORE_PEER_LOCALMSPID, CORE_PEER_ADDRESS, CORE_PEER_MSPCONFIGPATH, CORE_PEER_TLS_ROOTCERT_FILE, CORE_PEER_TLS_ENABLED.
+    Also set DRUNIX_CHANNEL, DRUNIX_CC_NAME, DRUNIX_ORDERER, DRUNIX_ORDERER_CA and DRUNIX_PEER_BIN (optional)."""
+    mode = "drunix"
+
+    def __init__(self):
+        self.channel = os.environ.get("DRUNIX_CHANNEL", "mychannel")
+        self.cc = os.environ.get("DRUNIX_CC_NAME", "remit")
+        self.orderer = os.environ.get("DRUNIX_ORDERER", "localhost:7050")
+        self.orderer_ca = os.environ.get("DRUNIX_ORDERER_CA", "")
+        self.peer = os.environ.get("DRUNIX_PEER_BIN", "peer")
+        self.env_dir = os.environ["DRUNIX_ORG_ENV_DIR"]
+
+    def _env(self, org):
+        env = dict(os.environ)
+        with open(os.path.join(self.env_dir, "org1.env" if org == REMITTER else "org2.env")) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    env[k] = v
+        return env
+
+    def _run(self, cmd, env):
+        p = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=60)
+        if p.returncode != 0:
+            raise LedgerError((p.stderr or p.stdout).strip()[-500:])
+        return p
+
+    def _invoke(self, org, fn, *args):
+        env = self._env(org)
+        payload = json.dumps({"function": fn, "Args": [str(a).lower() if isinstance(a, bool) else str(a) for a in args]})
+        cmd = [self.peer, "chaincode", "invoke", "-o", self.orderer, "-C", self.channel, "-n", self.cc,
+               "-c", payload, "--waitForEvent"]
+        if self.orderer_ca:
+            cmd += ["--tls", "--cafile", self.orderer_ca]
+        peer_addrs = os.environ.get("DRUNIX_ENDORSE_PEERS", "")  # "addr1|tlsca1,addr2|tlsca2"
+        for pair in filter(None, peer_addrs.split(",")):
+            addr, ca = pair.split("|")
+            cmd += ["--peerAddresses", addr, "--tlsRootCertFiles", ca]
+        self._run(cmd, env)
+
+    def _query(self, fn, *args):
+        env = self._env(REMITTER)
+        payload = json.dumps({"function": fn, "Args": [str(a) for a in args]})
+        p = self._run([self.peer, "chaincode", "query", "-C", self.channel, "-n", self.cc, "-c", payload], env)
+        return json.loads(p.stdout)
+
+    def GetRemittance(self, rid): return self._query("GetRemittance", rid)
+    def ListRemittances(self): return self._query("ListRemittances") or []
+    def GetRemittanceHistory(self, rid): return self._query("GetRemittanceHistory", rid) or []
+
+
+def _make_invoker(name):
+    def f(self, org, *args):
+        return self._invoke(org, name, *args)
+    return f
+
+
+for _fn in ["CreateRemittance", "LockQuote", "RecordScreening", "ReviewHold", "VerifyBeneficiary",
+            "ConfirmFunding", "SubmitPayout", "SettlePayout", "FailPayout", "Refund"]:
+    setattr(DrunixLedger, _fn, _make_invoker(_fn))
+
+
+def make_ledger():
+    return DrunixLedger() if os.environ.get("LEDGER_MODE", "memory") == "drunix" else MemoryLedger()
