@@ -1,58 +1,66 @@
-# RemitChain — cross-border remittance to India on Drunix
+# RemitChain: Institutional Cross-Border Remittance Portal
 
-Drunix Hackathon x Citi · Problem Statement 3: Cross-Border Remittances (also touches Financial Inclusion).
+## The Problem
+Traditional cross-border remittances are often slow, opaque, and expensive. They rely on fragmented correspondent banking networks (like SWIFT) which can take days to settle and lack transparency for the end-user. Issues like compliance holds, name mismatches, or payout rail failures are typically communicated manually, creating massive operational overhead and a poor user experience.
 
-**Problem.** Sending money to India still costs about 6% all-in on average, is opaque (the receive amount is unclear until after payment), takes hours to days, and fails without clear ownership of the refund.
+## The Solution
+RemitChain is a modern, API-first remittance orchestrator built for the next generation of instant cross-border payments (mimicking rails like UPI and modern banking infrastructure). 
+It features:
+- **Instant Settlement Simulation**: Orchestrates the full lifecycle of a transfer (Quote -> Screen -> Fund -> Payout -> Settle).
+- **Institutional UI**: A highly professional, flat-design portal built without heavy frameworks.
+- **Real-Time Tracking**: WebSockets power a live-updating transaction timeline for absolute transparency.
+- **Automated Compliance**: An integrated compliance desk that automatically flags high-risk transfers for manual review based on simulated risk scoring.
+- **Demo Scenarios**: Built-in developer tools to intentionally force edge cases (Sanctions Hits, Name Mismatches, Expired Quotes, etc.).
 
-**Idea.** Put the remittance *lifecycle* on a permissioned Drunix ledger shared by the remitting bank and the NPCI payout rail. Each organisation can only sign the steps it owns. The full price (FX rate, spread, fees, exact rupees received) is fixed on-chain before funding. Payout is idempotent and can never be double-paid. Failures and expiries refund automatically by rule, not by phone call.
+## Getting Started (Local Development)
 
-## What runs on Drunix (chaincode, Go)
-`chaincode/remit` implements a state machine with org-level access control:
+### Prerequisites
+- Python 3.9+
+- Git
 
-```
-CREATED -> QUOTED -> SCREENED -> VERIFIED -> FUNDED -> PAYOUT_SUBMITTED -> SETTLED
-              \-> BLOCKED / HELD (manual review)   \-> BENEFICIARY_REJECTED   \-> EXPIRED   \-> FAILED
-                                   any failure state -> REFUNDED
-```
+### Installation
 
-| Step | Signed by | Enforced on-chain |
-|---|---|---|
-| CreateRemittance | Remitting bank (Org1MSP) | purpose allow-list, no duplicates, only salted hashes stored (no PII) |
-| LockQuote | Remitting bank | deterministic integer pricing: fee, spread, exact paise received, all-in cost in bps, expiry from tx timestamp |
-| RecordScreening | Remitting bank | risk >= 85 or sanctions hit blocks; >= 60 or daily cap breach holds |
-| ReviewHold | Remitting bank | maker-checker for held transfers |
-| VerifyBeneficiary | Payout rail (Org2MSP) | name-match score >= 70 required |
-| ConfirmFunding | Remitting bank | quote must be unexpired; per-beneficiary daily cap |
-| SubmitPayout / SettlePayout / FailPayout | Payout rail | idempotent, payoutRef can never be reused |
-| Refund | Remitting bank | only from FAILED, EXPIRED, BLOCKED, BENEFICIARY_REJECTED |
+1. **Clone the repository**
+   \\\ash
+   git clone https://github.com/Ved-2107/NPCI_LATENCY.git
+   cd NPCI_LATENCY
+   \\\
 
-Off-chain (supporting components, allowed by FAQ 10): FastAPI hub, explainable AI risk scoring, simulated FX and UPI adapters, dashboard.
-The AI scores risk but **cannot override policy**: thresholds live in chaincode.
+2. **Set up the Python Virtual Environment**
+   Navigate into the \hub\ directory and create a virtual environment:
+   \\\ash
+   cd hub
+   python -m venv .venv
+   \\\
 
-## Layout
-```
-chaincode/remit/   Go chaincode (remit.go, pricing.go, tests)
-hub/               FastAPI hub: orchestrator, risk, FX + UPI simulators, ledger clients
-ui/index.html      Dashboard (served by the hub)
-testvectors/       Pricing vectors shared by Go and Python tests
-scripts/           run-demo.sh, deploy-cc.sh
-docs/              Architecture, pitch flow, Q&A prep
-```
+3. **Activate the Virtual Environment**
+   - **Windows:** \.venv\Scripts\activate\
+   - **Mac/Linux:** \source .venv/bin/activate\
 
-## Run the demo (no network needed)
-```bash
-./scripts/run-demo.sh        # http://localhost:8000
-cd hub && pytest -q          # 10 tests
-```
-Demo mode uses `MemoryLedger`, a Python port of the chaincode rules. The dashboard labels this clearly.
+4. **Install Dependencies**
+   \\\ash
+   pip install -r requirements.txt
+   pip install websockets uvicorn[standard]
+   \\\
 
-## Run on a real Drunix network
-1. `git clone https://github.com/npci/drunix.git drunix` (git-ignored) and follow its network README (Docker required).
-2. `cd chaincode/remit && go mod tidy && go test ./...`
-3. `./scripts/deploy-cc.sh`, create `org1.env` / `org2.env` (see `hub/env.example`), then `LEDGER_MODE=drunix uvicorn app.main:app --port 8000` from `hub/`.
+### Running the Project
 
-## Honest scope notes
-- FX rates and the UPI/NPCI adapter are simulated; swap adapters when sandbox access is granted.
-- Pricing supports 2-decimal currencies only. Purpose categories should be mapped to RBI purpose codes.
-- Compliance thresholds are demo policy, not regulatory advice.
-- The Go chaincode was written against `fabric-contract-api-go` and has not yet been run on a live Drunix network; `go test` and network smoke tests are the first thing to run.
+Start the FastAPI orchestrator in in-memory mode:
+
+**Windows (PowerShell):**
+\\\powershell
+$env:LEDGER_MODE="memory"
+uvicorn app.main:app --reload --port 8000
+\\\
+
+**Mac/Linux (Bash):**
+\\\ash
+export LEDGER_MODE="memory"
+uvicorn app.main:app --reload --port 8000
+\\\
+
+### Access the Application
+Once the server is running, open your browser and navigate to:
+**http://localhost:8000**
+
+You can immediately start simulating cross-border transactions and view them on the live-updating tracking timeline!
