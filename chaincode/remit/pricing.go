@@ -1,6 +1,9 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"math/big"
+)
 
 // Deterministic integer pricing. No floats, no clocks: every peer must compute
 // the exact same quote or endorsement fails.
@@ -34,6 +37,12 @@ type Quote struct {
 	ExpiresAtUnix      int64  `json:"expiresAtUnix"`
 }
 
+// mulDiv computes (a * b) / c using big.Int to avoid int64 overflow.
+func mulDiv(a, b, c int64) int64 {
+	ab := new(big.Int).Mul(big.NewInt(a), big.NewInt(b))
+	return new(big.Int).Div(ab, big.NewInt(c)).Int64()
+}
+
 // ComputeQuote prices a remittance. expiresAt is supplied by the caller
 // (derived from the transaction timestamp, never time.Now()).
 func ComputeQuote(ccy string, sendMinor, midMicro, spreadBps, feeFlat, feeBps, expiresAt int64) (*Quote, error) {
@@ -55,8 +64,8 @@ func ComputeQuote(ccy string, sendMinor, midMicro, spreadBps, feeFlat, feeBps, e
 	}
 	eff := midMicro * (bpsDenom - spreadBps) / bpsDenom
 	net := sendMinor - fee
-	receive := net * eff / rateScale
-	midReceive := sendMinor * midMicro / rateScale
+	receive := mulDiv(net, eff, rateScale)
+	midReceive := mulDiv(sendMinor, midMicro, rateScale)
 	if midReceive <= 0 || receive <= 0 {
 		return nil, errors.New("amount too small")
 	}

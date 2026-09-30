@@ -88,7 +88,8 @@ class Orchestrator:
             if sc == "quote_expired":
                 time.sleep(3)
             L.ConfirmFunding(REMITTER, rid, "FUND-" + rid)
-            self._emit(L.GetRemittance(rid), "CONFIRM_FUNDING")
+            updated = L.GetRemittance(rid)
+            self._emit(updated, "CONFIRM_FUNDING" if updated["status"] == "FUNDED" else "CONFIRM_FUNDING_FAILED")
         elif st == "FUNDED":
             L.SubmitPayout(PAYOUT, rid, upi.submit(rid))
             self._emit(L.GetRemittance(rid), "SUBMIT_PAYOUT")
@@ -107,7 +108,7 @@ class Orchestrator:
             if r["status"] in TERMINAL or r["status"] == "HELD":
                 return r
             self.step(rid)
-            time.sleep(0.8)
+            time.sleep(0.3)
         return self.ledger.GetRemittance(rid)
 
     def review(self, rid: str, approve: bool) -> dict:
