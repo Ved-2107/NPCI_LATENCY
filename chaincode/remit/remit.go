@@ -304,3 +304,63 @@ func (c *RemitContract) ReviewHold(ctx contractapi.TransactionContextInterface,
 	r.FailReason = note
 	return save(ctx, r, "REVIEW_REJECT", StBlocked)
 }
+
+// VerifyBeneficiary is called by the payout org after a name-match against the UPI address.
+func (c *RemitContract) VerifyBeneficiary(ctx contractapi.TransactionContextInterface,
+	id string, matchScore int) error {
+	if err := requireMSP(ctx, PayoutMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StScreened); err != nil {
+		return err
+	}
+	r.NameMatchScore = matchScore
+	if matchScore < MinNameMatchScore {
+		return save(ctx, r, "VERIFY_BENEFICIARY", StBenRej)
+	}
+	return save(ctx, r, "VERIFY_BENEFICIARY", StVerified)
+}
+
+// ConfirmFunding records that the send-side funds are secured. If the quote has expired
+// the remittance moves to EXPIRED (no error, so the state change commits).
+func (c *RemitContract) ConfirmFunding(ctx contractapi.TransactionContextInterface,
+	id, fundingRef string) error {
+	if err := requireMSP(ctx, RemitterMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StVerified); err != nil {
+		return err
+	}
+	if fundingRef == "" {
+		return fmt.Errorf("fundingRef required")
+	}
+	now, err := txNow(ctx)
+	if err != nil {
+		return err
+	}
+	if now > r.Quote.ExpiresAtUnix {
+		return save(ctx, r, "FUNDING_QUOTE_EXPIRED", StExpired)
+	}
+	vk := velocityKey(r.BeneficiaryHash, now)
+	used, err := readVelocity(ctx, vk)
+	if err != nil {
+		return err
+	}
+	if used+r.Quote.ReceivePaise > DailyBeneficiaryCapPaise {
+		return fmt.Errorf("daily beneficiary cap exceeded")
+	}
+	if err := writeVelocity(ctx, vk, used+r.Quote.ReceivePaise); err != nil {
+		return err
+	}
+	r.FundingRef = fundingRef
+	r.Funded = true
+	return save(ctx, r, "CONFIRM_FUNDING", StFunded)
+}
