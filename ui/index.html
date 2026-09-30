@@ -1,514 +1,397 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RemitChain · Premium</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg: #0B0F19;
-  --panel: rgba(19, 26, 42, 0.7);
-  --panel-border: rgba(255, 255, 255, 0.1);
-  --text: #F3F4F6;
-  --muted: #9CA3AF;
-  --accent: #3B82F6;
-  --accent-glow: rgba(59, 130, 246, 0.5);
-  --success: #10B981;
-  --warning: #F59E0B;
-  --danger: #EF4444;
-  --rail: #8B5CF6;
-  --font: 'Inter', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', monospace;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: var(--bg);
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
-  color: var(--text);
-  font: 14px/1.5 var(--font);
-  min-height: 100vh;
-}
-header {
-  padding: 24px 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--panel-border);
-  background: rgba(11, 15, 25, 0.8);
-  backdrop-filter: blur(12px);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-h1 { margin: 0; font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-h1::before { content: ''; display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
-.layout {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 32px;
-  padding: 32px 40px;
-  max-width: 1600px;
-  margin: 0 auto;
-}
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  padding: 24px;
-  backdrop-filter: blur(16px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-h2 { margin: 0 0 20px; font-size: 16px; font-weight: 600; color: #fff; }
-label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-input, select, button { font: inherit; color: inherit; width: 100%; }
-input, select {
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--panel-border);
-  padding: 10px 12px;
-  border-radius: 8px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-input:focus, select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
-}
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-button {
-  background: var(--text);
-  color: var(--bg);
-  border: none;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.1s, opacity 0.2s;
-  margin-top: 24px;
-}
-button:hover:not(:disabled) { transform: translateY(-1px); }
-button:active:not(:disabled) { transform: translateY(1px); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-button.secondary { background: transparent; color: var(--text); border: 1px solid var(--panel-border); margin-top: 12px; }
-
-/* Quote visual */
-.quote-box { margin-top: 24px; padding: 20px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; }
-.quote-recv { font-size: 32px; font-weight: 700; color: #fff; margin: 4px 0 16px; }
-.savings-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.15); color: var(--success); padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 500; border: 1px solid rgba(16, 185, 129, 0.3); }
-.kv { display: flex; justify-content: space-between; font-size: 13px; margin-top: 8px; color: var(--muted); }
-.kv span:last-child { color: var(--text); font-family: var(--mono); }
-
-/* Swim lanes */
-.lanes-wrapper { position: relative; margin: 32px 0; overflow-x: auto; }
-.lanes { display: grid; grid-template-columns: 140px repeat(7, minmax(100px, 1fr)); grid-template-rows: 80px 80px; gap: 16px; position: relative; }
-.lane-bg { position: absolute; left: 140px; right: 0; height: 60px; border-radius: 30px; background: rgba(255, 255, 255, 0.03); top: 10px; z-index: 0; }
-.lane-bg:nth-child(2) { top: 106px; }
-.lname { display: flex; flex-direction: column; justify-content: center; font-weight: 600; color: #fff; z-index: 1; }
-.lname small { color: var(--muted); font-weight: 400; font-size: 12px; }
-
-/* Nodes */
-.node {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--bg); border: 2px solid var(--panel-border);
-  display: grid; place-items: center; justify-self: center; align-self: center;
-  z-index: 2; position: relative; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 0 4px var(--bg);
-}
-.node svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity 0.3s; }
-.node.done { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 0 15px var(--accent-glow), 0 0 0 4px var(--bg); }
-.node.done.rail { border-color: var(--rail); background: var(--rail); box-shadow: 0 0 15px rgba(139, 92, 246, 0.5), 0 0 0 4px var(--bg); }
-.node.done svg { opacity: 1; }
-.node.active { border-color: var(--warning); border-style: dashed; animation: spin 4s linear infinite; }
-@keyframes spin { 100% { transform: rotate(360deg); } }
-
-/* Lines */
-svg.lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
-.line-path { stroke: var(--panel-border); stroke-width: 2; fill: none; transition: stroke 0.4s; }
-.line-path.active { stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 0 4px var(--accent-glow)); stroke-dasharray: 8 8; animation: march 1s linear infinite; }
-@keyframes march { to { stroke-dashoffset: -16; } }
-
-/* Badges */
-.badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; font-family: var(--mono); text-transform: uppercase; }
-.b-success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-.b-warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
-.b-err { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-
-/* Toasts */
-#toasts { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; z-index: 999; }
-.toast { background: var(--panel); border: 1px solid var(--panel-border); padding: 16px; border-radius: 12px; backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,0.5); min-width: 300px; transform: translateX(120%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: flex-start; gap: 12px; }
-.toast.show { transform: translateX(0); }
-.toast-icon { padding: 6px; border-radius: 8px; background: rgba(255,255,255,0.05); }
-
-/* Risk Panel */
-.risk-panel { margin-top: 16px; border-top: 1px solid var(--panel-border); padding-top: 16px; }
-.risk-bar-bg { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin: 8px 0; }
-.risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s, background 0.5s; }
-
-/* History list */
-.history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; max-height: 400px; overflow-y: auto; }
-.h-item { background: rgba(255,255,255,0.02); border: 1px solid transparent; padding: 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; }
-.h-item:hover { background: rgba(255,255,255,0.05); }
-.h-item.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RemitChain | Cross-Border Payments</title>
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<header>
-  <h1>RemitChain</h1>
-  <div style="display:flex; gap:16px; align-items:center;">
-    <div id="ws-status" class="badge b-warn">Connecting...</div>
-    <div class="badge b-success" id="mode">Demo Mode</div>
-  </div>
-</header>
-<div class="layout">
-  
-  <div class="panel">
-    <h2>New Transfer</h2>
-    <label>Corridor</label>
-    <select id="corridor"></select>
-    
-    <div class="row">
-      <div>
-        <label>You send</label>
-        <input id="amount" type="number" value="1000" min="10">
+  <!-- Utility Strip -->
+  <div class="utility-strip">
+    <div class="container util-container">
+      <div class="util-left">
+        <span class="tag-proto">PROTOTYPE</span>
       </div>
-      <div>
-        <label>Purpose</label>
-        <select id="purpose">
-          <option>FAMILY_MAINTENANCE</option>
-          <option>GIFT</option>
-          <option>INVESTMENT</option>
+      <div class="util-right">
+        <a href="#">Help</a>
+        <a href="#">Contact Us</a>
+        <select class="lang-select" aria-label="Language selector">
+          <option>English</option>
         </select>
       </div>
     </div>
-    
-    <label>Recipient Name</label>
-    <input id="benName" value="Meera Rao">
-    
-    <label>Recipient UPI</label>
-    <input id="vpa" value="meera@okbank">
-    
-    <label>Scenario</label>
-    <select id="scenario">
-      <option value="happy">Normal transfer (Happy path)</option>
-      <option value="high_risk">AI Anomaly (High Risk Hold)</option>
-      <option value="bad_beneficiary">Name Mismatch (Refund)</option>
-    </select>
-
-    <div class="quote-box" id="quote">
-      <div style="color:var(--muted); font-size:12px;">Recipient gets</div>
-      <div class="quote-recv" id="q-recv">--</div>
-      <div class="savings-badge" id="q-save">✨ Calculating...</div>
-      <div class="kv"><span>Exchange Rate</span><span id="q-rate">--</span></div>
-      <div class="kv"><span>Total Fee</span><span id="q-fee">--</span></div>
-    </div>
-
-    <button id="sendBtn">Initiate Transfer</button>
   </div>
 
-  <div>
-    <div class="panel" style="margin-bottom: 24px;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h2 style="margin:0;">Live Network Overview</h2>
-        <div style="display:flex; gap:16px; font-family:var(--mono); font-size:13px;" id="stats">
-          --
-        </div>
+  <!-- Main Header -->
+  <header class="main-header">
+    <div class="container header-container">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="16"></rect>
+          <path d="M2 10h20M7 15h2"></path>
+        </svg>
+        <span>RemitChain</span>
       </div>
+      <nav class="primary-nav" aria-label="Main Navigation">
+        <button class="nav-link active" data-tab="send">Send money</button>
+        <button class="nav-link" data-tab="track">Track transfer</button>
+        <button class="nav-link" data-tab="compliance">Compliance desk</button>
+        <button class="nav-link" data-tab="insights">Network insights</button>
+      </nav>
+      <button class="mobile-menu-btn" aria-label="Open menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      </button>
     </div>
+  </header>
 
-    <div class="panel" style="min-height: 400px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-        <h2 style="margin:0;">Transfer Tracker</h2>
-        <div id="t-status" class="badge">--</div>
-      </div>
-      
-      <div id="t-info" style="font-family:var(--mono); font-size:14px; margin-bottom: 16px;">Select a transfer to view details.</div>
-
-      <div class="lanes-wrapper">
-        <div class="lane-bg"></div>
-        <div class="lane-bg"></div>
-        <div class="lanes" id="lanes">
-          <div class="lname" style="grid-row:1; grid-column:1;">Citi<small>Remitting Bank</small></div>
-          <div class="lname" style="grid-row:2; grid-column:1;">NPCI<small>Payout Rail</small></div>
-          <!-- Nodes injected here -->
-        </div>
-        <svg class="lines" id="lines"></svg>
-      </div>
-      
-      <div id="t-risk" class="risk-panel" style="display:none;"></div>
-      
-      <div style="display:flex; gap:12px; margin-top:24px;">
-        <button id="btn-approve" class="b-success" style="display:none; width:auto;">Approve (Compliance)</button>
-        <button id="btn-reject" class="b-err" style="display:none; width:auto;">Reject</button>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-top: 24px;">
-      <h2>Recent Transfers</h2>
-      <div class="history-list" id="history"></div>
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-bar">
+    <div class="container" id="breadcrumb">
+      Home / Send money
     </div>
   </div>
-</div>
 
-<div id="toasts"></div>
-
-<script>
-const STEPS = [
-  {id:"CREATE", name:"Create", org:"bank", row:1},
-  {id:"LOCK_QUOTE", name:"Lock Quote", org:"bank", row:1},
-  {id:"SCREEN", name:"Screen", org:"bank", row:1},
-  {id:"VERIFY_BENEFICIARY", name:"Verify", org:"rail", row:2},
-  {id:"CONFIRM_FUNDING", name:"Fund", org:"bank", row:1},
-  {id:"SUBMIT_PAYOUT", name:"Submit", org:"rail", row:2},
-  {id:"SETTLE_PAYOUT", name:"Settle", org:"rail", row:2}
-];
-
-const $ = id => document.getElementById(id);
-let currentId = null;
-let ws = null;
-
-async function api(path, opts={}) {
-  const r = await fetch(path, opts);
-  const j = await r.json();
-  if(!r.ok) throw new Error(j.detail || "API Error");
-  return j;
-}
-
-const formatMoney = (minor, ccy, decimals=2) => {
-  const major = minor / Math.pow(10, decimals);
-  return new Intl.NumberFormat('en-US', {style:'currency', currency:ccy}).format(major);
-};
-
-// --- Initialization ---
-async function init() {
-  setupNodes();
-  connectWS();
-  
-  const h = await api("/api/health");
-  const c = await api("/api/corridors");
-  
-  $("corridor").innerHTML = Object.entries(c).map(([k,v])=>`<option value="${k}">${v.flag} ${v.name} (${v.ccy})</option>`).join("");
-  
-  ["corridor", "amount"].forEach(el => $(el).addEventListener("input", debounce(updateQuote, 300)));
-  updateQuote();
-  refreshList();
-  refreshStats();
-}
-
-function debounce(f, ms) { let t; return ()=> { clearTimeout(t); t=setTimeout(f,ms); }; }
-
-// --- WebSocket ---
-function connectWS() {
-  ws = new WebSocket(`ws://${location.host}/ws/events`);
-  ws.onopen = () => { $("ws-status").className = "badge b-success"; $("ws-status").innerText = "Live"; };
-  ws.onclose = () => { $("ws-status").className = "badge b-err"; $("ws-status").innerText = "Disconnected"; setTimeout(connectWS, 3000); };
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    showToast(`Update: ${msg.status.replace(/_/g, " ")}`, `Transfer ${msg.remittanceId}`);
-    refreshStats();
-    refreshList();
-    if (msg.remittanceId === currentId) loadDetail(currentId);
-  };
-}
-
-// --- Quote ---
-async function updateQuote() {
-  try {
-    const amount = parseInt($("amount").value) * 100; // simplistic, assumes 2 decimals for input
-    const corr = $("corridor").value;
-    const comp = await api(`/api/compare?corridor=${corr}&amountMinor=${amount}`);
+  <!-- Main Content Area -->
+  <main class="container main-content">
     
-    $("q-recv").innerText = formatMoney(comp.remitChainReceivePaise, 'INR', 2);
-    $("q-rate").innerText = `1 = ${formatMoney((comp.providers[0]?.costBps || 0) * 0, 'INR').replace('₹0.00', '')} ...`; // Simplified
-    $("q-fee").innerText = "Blockchain Fixed";
-    
-    const save = comp.savingsVsBankWire.perTransferPaise;
-    $("q-save").innerText = `✨ You save ${formatMoney(save, 'INR', 2)} vs Bank Wire`;
-  } catch(e) {}
-}
+    <!-- Alerts / Toasts Area -->
+    <div id="alerts-container"></div>
 
-// --- Actions ---
-$("sendBtn").onclick = async () => {
-  try {
-    $("sendBtn").disabled = true;
-    const payload = {
-      corridor: $("corridor").value,
-      senderName: "User",
-      beneficiaryName: $("benName").value,
-      beneficiaryVpa: $("vpa").value,
-      purpose: $("purpose").value,
-      amountMinor: parseInt($("amount").value) * 100,
-      scenario: $("scenario").value
-    };
-    const r = await api("/api/remittances", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
-    currentId = r.id;
-    await api(`/api/remittances/${r.id}/run`, {method:"POST"});
-    loadDetail(currentId);
-  } finally {
-    $("sendBtn").disabled = false;
-  }
-};
-
-$("btn-approve").onclick = async () => {
-  await api(`/api/remittances/${currentId}/review`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({approve:true})});
-  await api(`/api/remittances/${currentId}/run`, {method:"POST"});
-};
-
-$("btn-reject").onclick = async () => {
-  await api(`/api/remittances/${currentId}/review`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({approve:false})});
-};
-
-// --- UI Updates ---
-function setupNodes() {
-  const lanes = $("lanes");
-  STEPS.forEach((s, i) => {
-    lanes.innerHTML += `
-      <div class="node" id="n-${s.id}" style="grid-column:${i+2}; grid-row:${s.row};">
-        <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-        <div style="position:absolute; top:50px; width:100px; text-align:center; font-size:11px; color:var(--muted);">${s.name}</div>
+    <!-- TAB: SEND MONEY -->
+    <section id="tab-send" class="tab-pane active">
+      <div class="page-header">
+        <h1>Initiate Transfer</h1>
+        <p class="subtitle">Complete the steps below to lock a quote and initiate a cross-border remittance.</p>
       </div>
-    `;
-  });
-  
-  // Draw lines
-  setTimeout(drawLines, 100);
-}
+      
+      <div class="wizard-container">
+        <!-- Wizard Steps -->
+        <div class="wizard-steps" aria-label="Progress">
+          <div class="w-step active" id="w-step-1">1. Recipient</div>
+          <div class="w-step" id="w-step-2">2. Amount</div>
+          <div class="w-step" id="w-step-3">3. Review</div>
+          <div class="w-step" id="w-step-4">4. Confirmation</div>
+        </div>
 
-function drawLines() {
-  const svg = $("lines");
-  svg.innerHTML = "";
-  const lanes = $("lanes").getBoundingClientRect();
-  
-  for(let i=0; i<STEPS.length-1; i++) {
-    const n1 = $(`n-${STEPS[i].id}`).getBoundingClientRect();
-    const n2 = $(`n-${STEPS[i+1].id}`).getBoundingClientRect();
-    
-    const x1 = n1.left - lanes.left + n1.width/2;
-    const y1 = n1.top - lanes.top + n1.height/2;
-    const x2 = n2.left - lanes.left + n2.width/2;
-    const y2 = n2.top - lanes.top + n2.height/2;
-    
-    svg.innerHTML += `<path id="l-${i}" class="line-path" d="M ${x1} ${y1} L ${x2} ${y2}" />`;
-  }
-}
+        <div class="wizard-body">
+          <!-- Step 1: Recipient -->
+          <div class="w-panel active" id="panel-1">
+            <div class="form-group">
+              <label for="corridor">Corridor <span class="req">*</span></label>
+              <select id="corridor" required></select>
+              <div class="helper-text">Select the source and destination country.</div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="sender">Remitter Name <span class="req">*</span></label>
+                <input id="sender" type="text" value="Asha Rao" required>
+                <div class="helper-text">Full legal name of the sender.</div>
+              </div>
+              <div class="form-group">
+                <label for="purpose">Transfer Purpose <span class="req">*</span></label>
+                <select id="purpose" required>
+                  <option value="FAMILY_MAINTENANCE">Family Maintenance</option>
+                  <option value="EDUCATION">Education</option>
+                  <option value="MEDICAL">Medical Treatment</option>
+                  <option value="GIFT">Gift</option>
+                  <option value="INVESTMENT">Investment</option>
+                  <option value="TRAVEL">Travel</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="benName">Beneficiary Name <span class="req">*</span></label>
+                <input id="benName" type="text" value="Meera Rao" required>
+              </div>
+              <div class="form-group">
+                <label for="vpa">Beneficiary VPA / UPI ID <span class="req">*</span></label>
+                <input id="vpa" type="text" value="meera@okbank" required>
+                <div class="helper-text">e.g., name@bank</div>
+              </div>
+            </div>
+            <div class="wizard-actions">
+              <div></div>
+              <button class="btn btn-primary" onclick="wizardNext(2)">Continue</button>
+            </div>
+          </div>
 
-async function refreshList() {
-  const list = await api("/api/remittances");
-  $("history").innerHTML = list.map(r => `
-    <div class="h-item ${r.id === currentId ? 'selected' : ''}" onclick="currentId='${r.id}'; loadDetail('${r.id}'); refreshList();">
-      <div>
-        <div style="font-family:var(--mono);">${r.id}</div>
-        <div style="font-size:12px; color:var(--muted);">${r.corridor}</div>
+          <!-- Step 2: Amount -->
+          <div class="w-panel" id="panel-2">
+            <div class="form-group" style="max-width: 400px;">
+              <label for="amount">Send Amount <span class="req">*</span></label>
+              <div class="input-with-symbol">
+                <input id="amount" type="number" value="1000" min="10" step="1" required>
+                <span class="symbol" id="amt-ccy">USD</span>
+              </div>
+              <div class="helper-text">Amount to send in source currency.</div>
+            </div>
+            
+            <div class="quote-preview" id="quote-preview">
+              <div class="loader" id="quote-loader">Calculating live quote...</div>
+              <div id="quote-data" style="display:none;">
+                <table class="quote-table">
+                  <tbody>
+                    <tr>
+                      <td>Send Amount</td>
+                      <td class="num" id="q-send">--</td>
+                    </tr>
+                    <tr>
+                      <td>Transfer Fee</td>
+                      <td class="num" id="q-fee">--</td>
+                    </tr>
+                    <tr>
+                      <td>Total to Fund</td>
+                      <td class="num strong" id="q-fund">--</td>
+                    </tr>
+                    <tr class="spacer"><td></td><td></td></tr>
+                    <tr>
+                      <td>Exchange Rate</td>
+                      <td class="num" id="q-rate">--</td>
+                    </tr>
+                    <tr class="highlight">
+                      <td>Recipient Receives</td>
+                      <td class="num strong" id="q-recv">--</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div class="wizard-actions">
+              <button class="btn btn-secondary" onclick="wizardNext(1)">Back</button>
+              <button class="btn btn-primary" onclick="wizardNext(3)" id="btn-to-review">Continue to Review</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Review -->
+          <div class="w-panel" id="panel-3">
+            <h3>Review Transfer Details</h3>
+            <div class="review-grid">
+              <div class="r-col">
+                <h4>Sender Details</h4>
+                <div class="kv"><span>Name:</span><b id="r-sender">--</b></div>
+                <div class="kv"><span>Purpose:</span><b id="r-purpose">--</b></div>
+              </div>
+              <div class="r-col">
+                <h4>Beneficiary Details</h4>
+                <div class="kv"><span>Name:</span><b id="r-benName">--</b></div>
+                <div class="kv"><span>UPI ID:</span><b id="r-vpa">--</b></div>
+                <div class="kv"><span>Corridor:</span><b id="r-corridor">--</b></div>
+              </div>
+            </div>
+            
+            <div class="review-financials" id="r-financials">
+              <!-- Cloned from quote table -->
+            </div>
+            
+            <div class="form-group checkbox-group" style="margin-top: 24px;">
+              <input type="checkbox" id="confirm-check">
+              <label for="confirm-check">I confirm the details above are correct and authorize this transfer.</label>
+            </div>
+            
+            <div class="wizard-actions">
+              <button class="btn btn-secondary" onclick="wizardNext(2)">Back</button>
+              <button class="btn btn-primary" id="btn-submit" disabled>Submit Transfer</button>
+            </div>
+          </div>
+
+          <!-- Step 4: Confirmation -->
+          <div class="w-panel" id="panel-4">
+            <div class="success-message">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path></svg>
+              <h2>Transfer Initiated</h2>
+              <p>Your transfer has been successfully submitted to the ledger.</p>
+              <div class="kv-center"><span>Transfer Reference:</span><b id="c-ref" class="mono">--</b></div>
+            </div>
+            <div class="wizard-actions" style="justify-content: center; margin-top: 32px;">
+              <button class="btn btn-primary" onclick="viewTransferDetail()">Track this transfer</button>
+              <button class="btn btn-secondary" onclick="resetWizard()">New transfer</button>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="badge ${r.status === 'SETTLED' ? 'b-success' : (['REFUNDED','BLOCKED'].includes(r.status) ? 'b-err' : 'b-warn')}">
-        ${r.status}
+
+      <!-- Demo Controls (Collapsed) -->
+      <details class="demo-controls">
+        <summary>Developer / Demo Scenarios</summary>
+        <div class="demo-body">
+          <label for="scenario">Force Ledger Scenario</label>
+          <select id="scenario">
+            <option value="happy">Normal transfer (Happy path)</option>
+            <option value="high_risk">AI Anomaly (High Risk Hold)</option>
+            <option value="bad_beneficiary">Name Mismatch (UPI Reject -> Refund)</option>
+            <option value="sanctions_hit">Sanctions Hit (Block)</option>
+            <option value="payout_fail">Payout Rail Down (Refund)</option>
+            <option value="quote_expired">Quote Expired Before Funding</option>
+          </select>
+          <p class="helper-text">Overrides normal logic to demonstrate edge cases.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- TAB: TRACK TRANSFER -->
+    <section id="tab-track" class="tab-pane">
+      <div class="page-header">
+        <h1>Track Transfer</h1>
+      </div>
+      
+      <div class="track-layout">
+        <!-- List View -->
+        <div class="track-list-view" id="track-list-view">
+          <div class="search-bar">
+            <input type="text" id="search-tx" placeholder="Search by Transfer Reference or Status...">
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Corridor</th>
+                  <th>Status</th>
+                  <th>Last Updated</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="tx-table-body">
+                <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Detail View -->
+        <div class="track-detail-view" id="track-detail-view" style="display:none;">
+          <div class="detail-header">
+            <button class="btn btn-secondary btn-sm" onclick="closeDetail()">&larr; Back to list</button>
+            <h3 id="dt-ref" class="mono">--</h3>
+            <span id="dt-status" class="badge">--</span>
+          </div>
+          
+          <div class="detail-grid">
+            <div class="timeline-panel">
+              <h4>Status Timeline</h4>
+              <div class="timeline" id="dt-timeline">
+                <!-- Timeline items injected here -->
+              </div>
+              <div id="dt-error" class="alert alert-error" style="display:none; margin-top: 16px;"></div>
+            </div>
+            
+            <div class="ledger-panel">
+              <h4>Ledger Proof</h4>
+              <p class="helper-text">Cryptographic signatures on Drunix.</p>
+              <div class="proof-list" id="dt-proofs">
+                <!-- Proofs injected here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: COMPLIANCE DESK -->
+    <section id="tab-compliance" class="tab-pane">
+      <div class="page-header">
+        <h1>Compliance Desk</h1>
+        <p class="subtitle">Review transfers flagged by the AI risk engine or AML rules.</p>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Risk Score</th>
+              <th>Reason Codes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="comp-table-body">
+            <tr><td colspan="4" class="empty-state">No transfers pending review.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB: INSIGHTS -->
+    <section id="tab-insights" class="tab-pane">
+      <div class="page-header">
+        <h1>Network Insights</h1>
+      </div>
+      
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">Total Transfers</div>
+          <div class="kpi-value" id="kpi-total">--</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Settled</div>
+          <div class="kpi-value" id="kpi-settled">--</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Held / Flagged</div>
+          <div class="kpi-value" id="kpi-held">--</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Avg Settle Time</div>
+          <div class="kpi-value" id="kpi-time">--</div>
+        </div>
+      </div>
+      
+      <div class="chart-panel" style="margin-top: 24px;">
+        <h3>Cost Efficiency vs Benchmark</h3>
+        <p class="helper-text">Average all-in cost (FX margin + fees) compared to traditional 6.50% SWIFT/Wire average.</p>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="bar-label">RemitChain</div>
+            <div class="bar-track">
+              <div class="bar-fill blue" id="bar-rc" style="width: 0%"></div>
+            </div>
+            <div class="bar-val" id="val-rc">--%</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Traditional</div>
+            <div class="bar-track">
+              <div class="bar-fill grey" style="width: 100%"></div>
+            </div>
+            <div class="bar-val">6.50%</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="main-footer">
+    <div class="container footer-grid">
+      <div class="f-col">
+        <h4>RemitChain</h4>
+        <a href="#">About Us</a>
+        <a href="#">Network Members</a>
+        <a href="#">Developer API</a>
+      </div>
+      <div class="f-col">
+        <h4>Support</h4>
+        <a href="#">Help Center</a>
+        <a href="#">Contact Support</a>
+        <a href="#">System Status</a>
+      </div>
+      <div class="f-col">
+        <h4>Legal</h4>
+        <a href="#">Terms of Service</a>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Security</a>
       </div>
     </div>
-  `).join("");
-}
-
-async function refreshStats() {
-  const s = await api("/api/stats");
-  $("stats").innerHTML = `
-    <div>Total: <span style="color:#fff">${s.total}</span></div>
-    <div>Settled: <span style="color:var(--success)">${s.settled}</span></div>
-    <div>Avg Cost: <span style="color:var(--accent)">${(s.avgCostBps/100).toFixed(2)}%</span></div>
-  `;
-}
-
-async function loadDetail(id) {
-  if (!id) return;
-  const r = await api(`/api/remittances/${id}`);
-  
-  $("t-status").innerText = r.status;
-  $("t-status").className = `badge ${r.status === 'SETTLED' ? 'b-success' : (['REFUNDED','BLOCKED','FAILED'].includes(r.status) ? 'b-err' : 'b-warn')}`;
-  
-  $("t-info").innerHTML = `ID: ${r.id} | Corridor: ${r.corridor}`;
-  
-  // Update nodes and lines
-  const trail = r.trail.map(t => t.step);
-  
-  STEPS.forEach((s, i) => {
-    const node = $(`n-${s.id}`);
-    node.className = "node";
-    if (trail.includes(s.id)) {
-      node.classList.add("done");
-      if (s.org === 'rail') node.classList.add("rail");
-    }
-  });
-  
-  // Highlight active line
-  for(let i=0; i<STEPS.length-1; i++) {
-    const line = $(`l-${i}`);
-    if (line) {
-      if (trail.includes(STEPS[i].id) && trail.includes(STEPS[i+1].id)) {
-        line.style.stroke = "var(--accent)";
-        line.classList.remove("active");
-      } else if (trail.includes(STEPS[i].id) && !['SETTLED','REFUNDED','FAILED','BLOCKED'].includes(r.status)) {
-        line.classList.add("active");
-      } else {
-        line.style.stroke = "var(--panel-border)";
-        line.classList.remove("active");
-      }
-    }
-  }
-
-  // Risk panel
-  if (r.status === 'HELD' || r.riskScore) {
-    $("t-risk").style.display = "block";
-    let color = "var(--success)";
-    if (r.riskScore >= 60) color = "var(--warning)";
-    if (r.riskScore >= 85) color = "var(--danger)";
-    
-    $("t-risk").innerHTML = `
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-        <span style="font-weight:600;">AI Risk Score</span>
-        <span style="font-family:var(--mono); color:${color}">${r.riskScore}/100</span>
+    <div class="container footer-bottom">
+      <p>Disclaimer: RemitChain is an independent hackathon prototype built on Drunix. Not affiliated with, endorsed by, or operated by NPCI or Citi.</p>
+      <div class="footer-status">
+        <span class="status-dot"></span> <span id="f-mode">Connecting...</span>
       </div>
-      <div class="risk-bar-bg">
-        <div class="risk-bar-fill" style="width:${r.riskScore}%; background:${color};"></div>
-      </div>
-      <div style="font-size:12px; color:var(--muted); margin-top:8px;">
-        Reasons: ${r.reasonCodes ? r.reasonCodes.join(", ") : "None"}
-      </div>
-    `;
-    
-    if (r.status === 'HELD') {
-      $("btn-approve").style.display = "inline-block";
-      $("btn-reject").style.display = "inline-block";
-    } else {
-      $("btn-approve").style.display = "none";
-      $("btn-reject").style.display = "none";
-    }
-  } else {
-    $("t-risk").style.display = "none";
-    $("btn-approve").style.display = "none";
-    $("btn-reject").style.display = "none";
-  }
-}
-
-function showToast(title, body) {
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.innerHTML = `
-    <div class="toast-icon">⚡</div>
-    <div>
-      <div style="font-weight:600; font-size:13px; color:#fff;">${title}</div>
-      <div style="font-size:12px; color:var(--muted); margin-top:2px;">${body}</div>
     </div>
-  `;
-  $("toasts").appendChild(t);
-  setTimeout(() => t.classList.add("show"), 10);
-  setTimeout(() => {
-    t.classList.remove("show");
-    setTimeout(() => t.remove(), 300);
-  }, 4000);
-}
+  </footer>
 
-init();
-</script>
+  <script src="/static/app.js"></script>
 </body>
 </html>
