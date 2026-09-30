@@ -364,3 +364,111 @@ func (c *RemitContract) ConfirmFunding(ctx contractapi.TransactionContextInterfa
 	r.Funded = true
 	return save(ctx, r, "CONFIRM_FUNDING", StFunded)
 }
+
+// SubmitPayout hands the credit instruction to the payout rail. Idempotent per payoutRef,
+// and a payoutRef can never be reused by another remittance (double-payout guard).
+func (c *RemitContract) SubmitPayout(ctx contractapi.TransactionContextInterface,
+	id, payoutRef string) error {
+	if err := requireMSP(ctx, PayoutMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if r.Status == StSubmitted && r.PayoutRef == payoutRef {
+		return nil
+	}
+	if err := requireStatus(r, StFunded); err != nil {
+		return err
+	}
+	if payoutRef == "" {
+		return fmt.Errorf("payoutRef required")
+	}
+	pk := "PAYOUTREF_" + payoutRef
+	if b, err := ctx.GetStub().GetState(pk); err != nil {
+		return err
+	} else if b != nil {
+		return fmt.Errorf("payoutRef %s already used", payoutRef)
+	}
+	if err := ctx.GetStub().PutState(pk, []byte(id)); err != nil {
+		return err
+	}
+	r.PayoutRef = payoutRef
+	return save(ctx, r, "SUBMIT_PAYOUT", StSubmitted)
+}
+
+// SettlePayout is the final success step, carrying the UPI reference.
+func (c *RemitContract) SettlePayout(ctx contractapi.TransactionContextInterface,
+	id, upiRef string) error {
+	if err := requireMSP(ctx, PayoutMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if r.Status == StSettled && r.UPIRef == upiRef {
+		return nil
+	}
+	if err := requireStatus(r, StSubmitted); err != nil {
+		return err
+	}
+	if upiRef == "" {
+		return fmt.Errorf("upiRef required")
+	}
+	r.UPIRef = upiRef
+	return save(ctx, r, "SETTLE_PAYOUT", StSettled)
+}
+
+// FailPayout marks the payout as failed so the sender can be refunded.
+func (c *RemitContract) FailPayout(ctx contractapi.TransactionContextInterface,
+	id, reason string) error {
+	if err := requireMSP(ctx, PayoutMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StSubmitted); err != nil {
+		return err
+	}
+	r.FailReason = reason
+	return save(ctx, r, "FAIL_PAYOUT", StFailed)
+}
+
+// Refund returns funds for any non-settled terminal-failure state and releases the velocity budget.
+func (c *RemitContract) Refund(ctx contractapi.TransactionContextInterface,
+	id, refundRef string) error {
+	if err := requireMSP(ctx, RemitterMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StFailed, StExpired, StBlocked, StBenRej); err != nil {
+		return err
+	}
+	if refundRef == "" {
+		return fmt.Errorf("refundRef required")
+	}
+	if r.Funded {
+		now, err := txNow(ctx)
+		if err != nil {
+			return err
+		}
+		// Note: released against the refund-day bucket; acceptable for the prototype.
+		vk := velocityKey(r.BeneficiaryHash, now)
+		used, err := readVelocity(ctx, vk)
+		if err != nil {
+			return err
+		}
+		if err := writeVelocity(ctx, vk, used-r.Quote.ReceivePaise); err != nil {
+			return err
+		}
+	}
+	r.RefundRef = refundRef
+	return save(ctx, r, "REFUND", StRefunded)
+}
