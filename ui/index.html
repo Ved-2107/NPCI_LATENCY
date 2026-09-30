@@ -3,228 +3,511 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RemitChain · cross-border remittance on Drunix</title>
+<title>RemitChain · Premium</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{
-  --ink:#14222B; --mist:#E8EDEF; --panel:#FFFFFF; --line:#CBD5DA; --muted:#5A6B75;
-  --bank:#3A4FA0; --rail:#0B7A75; --alert:#C4472D; --hold:#A8720E;
-  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+:root {
+  --bg: #0B0F19;
+  --panel: rgba(19, 26, 42, 0.7);
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --text: #F3F4F6;
+  --muted: #9CA3AF;
+  --accent: #3B82F6;
+  --accent-glow: rgba(59, 130, 246, 0.5);
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --rail: #8B5CF6;
+  --font: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
 }
-@media (prefers-color-scheme:dark){
-  :root{--ink:#E6EDF0;--mist:#0F1A21;--panel:#16252E;--line:#2C3E49;--muted:#93A5AF;--bank:#8DA0F0;--rail:#4CC2BB;--alert:#F0866D;--hold:#E2B24F}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15), transparent 25%);
+  color: var(--text);
+  font: 14px/1.5 var(--font);
+  min-height: 100vh;
 }
-*{box-sizing:border-box}
-body{margin:0;background:var(--mist);color:var(--ink);font:15px/1.5 var(--font)}
-header{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:baseline;padding:24px 32px 8px}
-h1{font-size:28px;margin:0;font-weight:600;letter-spacing:-.01em}
-.sub{color:var(--muted);max-width:60ch}
-.mode{margin-left:auto;font-size:13px;color:var(--muted)}
-main{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:24px;padding:16px 32px 48px;align-items:start}
-@media(max-width:900px){main{grid-template-columns:1fr;padding:16px}header{padding:20px 16px 8px}}
-section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px}
-h2{font-size:16px;margin:0 0 14px;font-weight:600}
-label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
-input,select,button{font:inherit;color:inherit}
-input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
-input:focus,select:focus,button:focus-visible{outline:2px solid var(--bank);outline-offset:1px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-button{cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:4px;font-weight:500}
-button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
-button:disabled{opacity:.45;cursor:not-allowed}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
-.quote{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
-.recv{font-size:30px;font-weight:600;letter-spacing:-.02em}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 16px;font-size:13px;color:var(--muted);margin:8px 0}
-.kv b{color:var(--ink);font-weight:500;text-align:right}
-.bar{position:relative;height:10px;background:var(--mist);border-radius:2px;margin:10px 0 4px}
-.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--rail);border-radius:2px}
-.cap{font-size:12px;color:var(--muted)}
-.lanes{position:relative;display:grid;grid-template-columns:110px repeat(7,1fr);grid-template-rows:64px 64px;align-items:center;margin:8px 0 4px}
-.lanes svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.lname{font-size:13px;font-weight:600;padding-right:8px}
-.lname small{display:block;font-weight:400;color:var(--muted)}
-.node{justify-self:center;width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:var(--panel);display:grid;place-items:center;font-size:12px;position:relative;z-index:1}
-.node.bank.done{background:var(--bank);border-color:var(--bank);color:var(--panel)}
-.node.rail.done{background:var(--rail);border-color:var(--rail);color:var(--panel)}
-.node.now{outline:3px solid color-mix(in srgb,var(--hold) 45%,transparent)}
-.steps{display:grid;grid-template-columns:110px repeat(7,1fr);font-size:12px;color:var(--muted);text-align:center}
-.steps span{padding:0 2px}
-.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:500;border:1px solid var(--line)}
-.badge.SETTLED{color:var(--rail);border-color:var(--rail)}
-.badge.REFUNDED,.badge.BLOCKED,.badge.FAILED,.badge.EXPIRED,.badge.BENEFICIARY_REJECTED{color:var(--alert);border-color:var(--alert)}
-.badge.HELD{color:var(--hold);border-color:var(--hold)}
-.exc{margin:12px 0 0;padding:10px 12px;border-left:3px solid var(--alert);background:var(--mist);font-size:13px}
-.trail{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
-.trail td,.trail th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;font-weight:400}
-.trail th{color:var(--muted)}
-.mono{font-family:var(--mono);font-size:12px}
-.list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
-.list button{display:flex;justify-content:space-between;gap:12px;background:transparent;color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:400}
-.list button[aria-current=true]{border-color:var(--bank)}
-.stats{display:flex;flex-wrap:wrap;gap:8px 28px;margin-top:6px}
-.stats div{font-size:13px;color:var(--muted)} .stats b{display:block;font-size:20px;color:var(--ink);font-weight:600}
-.empty{color:var(--muted);padding:24px 0}
-.stack{display:flex;flex-direction:column;gap:24px}
-.err{color:var(--alert);font-size:13px;margin-top:8px;min-height:1em}
-@media (prefers-reduced-motion:no-preference){.node{transition:background .25s,border-color .25s}}
+header {
+  padding: 24px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(11, 15, 25, 0.8);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+h1 { margin: 0; font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+h1::before { content: ''; display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+.layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 32px;
+  padding: 32px 40px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 24px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+h2 { margin: 0 0 20px; font-size: 16px; font-weight: 600; color: #fff; }
+label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+input, select, button { font: inherit; color: inherit; width: 100%; }
+input, select {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--panel-border);
+  padding: 10px 12px;
+  border-radius: 8px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+button {
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+  margin-top: 24px;
+}
+button:hover:not(:disabled) { transform: translateY(-1px); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary { background: transparent; color: var(--text); border: 1px solid var(--panel-border); margin-top: 12px; }
+
+/* Quote visual */
+.quote-box { margin-top: 24px; padding: 20px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; }
+.quote-recv { font-size: 32px; font-weight: 700; color: #fff; margin: 4px 0 16px; }
+.savings-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.15); color: var(--success); padding: 4px 10px; border-radius: 99px; font-size: 13px; font-weight: 500; border: 1px solid rgba(16, 185, 129, 0.3); }
+.kv { display: flex; justify-content: space-between; font-size: 13px; margin-top: 8px; color: var(--muted); }
+.kv span:last-child { color: var(--text); font-family: var(--mono); }
+
+/* Swim lanes */
+.lanes-wrapper { position: relative; margin: 32px 0; overflow-x: auto; }
+.lanes { display: grid; grid-template-columns: 140px repeat(7, minmax(100px, 1fr)); grid-template-rows: 80px 80px; gap: 16px; position: relative; }
+.lane-bg { position: absolute; left: 140px; right: 0; height: 60px; border-radius: 30px; background: rgba(255, 255, 255, 0.03); top: 10px; z-index: 0; }
+.lane-bg:nth-child(2) { top: 106px; }
+.lname { display: flex; flex-direction: column; justify-content: center; font-weight: 600; color: #fff; z-index: 1; }
+.lname small { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+/* Nodes */
+.node {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--bg); border: 2px solid var(--panel-border);
+  display: grid; place-items: center; justify-self: center; align-self: center;
+  z-index: 2; position: relative; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 0 4px var(--bg);
+}
+.node svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity 0.3s; }
+.node.done { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 0 15px var(--accent-glow), 0 0 0 4px var(--bg); }
+.node.done.rail { border-color: var(--rail); background: var(--rail); box-shadow: 0 0 15px rgba(139, 92, 246, 0.5), 0 0 0 4px var(--bg); }
+.node.done svg { opacity: 1; }
+.node.active { border-color: var(--warning); border-style: dashed; animation: spin 4s linear infinite; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Lines */
+svg.lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.line-path { stroke: var(--panel-border); stroke-width: 2; fill: none; transition: stroke 0.4s; }
+.line-path.active { stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 0 4px var(--accent-glow)); stroke-dasharray: 8 8; animation: march 1s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -16; } }
+
+/* Badges */
+.badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; font-family: var(--mono); text-transform: uppercase; }
+.b-success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+.b-warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+.b-err { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+/* Toasts */
+#toasts { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; z-index: 999; }
+.toast { background: var(--panel); border: 1px solid var(--panel-border); padding: 16px; border-radius: 12px; backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,0.5); min-width: 300px; transform: translateX(120%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: flex-start; gap: 12px; }
+.toast.show { transform: translateX(0); }
+.toast-icon { padding: 6px; border-radius: 8px; background: rgba(255,255,255,0.05); }
+
+/* Risk Panel */
+.risk-panel { margin-top: 16px; border-top: 1px solid var(--panel-border); padding-top: 16px; }
+.risk-bar-bg { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+.risk-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s, background 0.5s; }
+
+/* History list */
+.history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; max-height: 400px; overflow-y: auto; }
+.h-item { background: rgba(255,255,255,0.02); border: 1px solid transparent; padding: 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; }
+.h-item:hover { background: rgba(255,255,255,0.05); }
+.h-item.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
 </style>
 </head>
 <body>
 <header>
   <h1>RemitChain</h1>
-  <p class="sub">Send money to India. Every step is signed by the bank or the payout rail on a shared Drunix ledger, and the full cost is fixed before you pay.</p>
-  <span class="mode" id="mode"></span>
+  <div style="display:flex; gap:16px; align-items:center;">
+    <div id="ws-status" class="badge b-warn">Connecting...</div>
+    <div class="badge b-success" id="mode">Demo Mode</div>
+  </div>
 </header>
-<main>
-  <div class="stack">
-    <section aria-labelledby="send-h">
-      <h2 id="send-h">Send money</h2>
-      <label for="corridor">Corridor</label><select id="corridor"></select>
-      <div class="row">
-        <div><label for="amount">You send</label><input id="amount" type="number" min="10" step="0.01" value="1000"></div>
-        <div><label for="purpose">Purpose</label>
-          <select id="purpose"><option>FAMILY_MAINTENANCE</option><option>EDUCATION</option><option>MEDICAL</option><option>GIFT</option><option>INVESTMENT</option><option>TRAVEL</option></select></div>
+<div class="layout">
+  
+  <div class="panel">
+    <h2>New Transfer</h2>
+    <label>Corridor</label>
+    <select id="corridor"></select>
+    
+    <div class="row">
+      <div>
+        <label>You send</label>
+        <input id="amount" type="number" value="1000" min="10">
       </div>
-      <label for="sender">Your name</label><input id="sender" value="Asha Rao">
-      <label for="benName">Recipient name</label><input id="benName" value="Meera Rao">
-      <label for="vpa">Recipient UPI address</label><input id="vpa" value="meera@okbank">
-      <label for="scenario">Demo scenario</label>
-      <select id="scenario">
-        <option value="happy">Normal transfer</option>
-        <option value="high_risk">High risk, needs compliance review</option>
-        <option value="sanctions_hit">Sanctions match, blocked</option>
-        <option value="bad_beneficiary">Recipient name does not match</option>
-        <option value="payout_fail">Payout fails, sender refunded</option>
-        <option value="quote_expired">Quote expires before funding</option>
-      </select>
-      <div class="actions">
-        <button id="sendRun">Send now</button>
-        <button id="sendStep" class="ghost">Create, then step through</button>
+      <div>
+        <label>Purpose</label>
+        <select id="purpose">
+          <option>FAMILY_MAINTENANCE</option>
+          <option>GIFT</option>
+          <option>INVESTMENT</option>
+        </select>
       </div>
-      <div class="err" id="err" role="alert"></div>
-      <div class="quote" id="quote"></div>
-    </section>
-    <section aria-labelledby="stats-h">
-      <h2 id="stats-h">Network results</h2>
-      <div class="stats" id="stats"></div>
-    </section>
+    </div>
+    
+    <label>Recipient Name</label>
+    <input id="benName" value="Meera Rao">
+    
+    <label>Recipient UPI</label>
+    <input id="vpa" value="meera@okbank">
+    
+    <label>Scenario</label>
+    <select id="scenario">
+      <option value="happy">Normal transfer (Happy path)</option>
+      <option value="high_risk">AI Anomaly (High Risk Hold)</option>
+      <option value="bad_beneficiary">Name Mismatch (Refund)</option>
+    </select>
+
+    <div class="quote-box" id="quote">
+      <div style="color:var(--muted); font-size:12px;">Recipient gets</div>
+      <div class="quote-recv" id="q-recv">--</div>
+      <div class="savings-badge" id="q-save">✨ Calculating...</div>
+      <div class="kv"><span>Exchange Rate</span><span id="q-rate">--</span></div>
+      <div class="kv"><span>Total Fee</span><span id="q-fee">--</span></div>
+    </div>
+
+    <button id="sendBtn">Initiate Transfer</button>
   </div>
-  <div class="stack">
-    <section aria-labelledby="lane-h">
-      <h2 id="lane-h">Transfer on the ledger</h2>
-      <div id="detail"><div class="empty">No transfer selected. Send money to see each signed step appear here.</div></div>
-    </section>
-    <section aria-labelledby="recent-h">
-      <h2 id="recent-h">Recent transfers</h2>
-      <div class="list" id="list"></div>
-    </section>
+
+  <div>
+    <div class="panel" style="margin-bottom: 24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0;">Live Network Overview</h2>
+        <div style="display:flex; gap:16px; font-family:var(--mono); font-size:13px;" id="stats">
+          --
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="min-height: 400px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <h2 style="margin:0;">Transfer Tracker</h2>
+        <div id="t-status" class="badge">--</div>
+      </div>
+      
+      <div id="t-info" style="font-family:var(--mono); font-size:14px; margin-bottom: 16px;">Select a transfer to view details.</div>
+
+      <div class="lanes-wrapper">
+        <div class="lane-bg"></div>
+        <div class="lane-bg"></div>
+        <div class="lanes" id="lanes">
+          <div class="lname" style="grid-row:1; grid-column:1;">Citi<small>Remitting Bank</small></div>
+          <div class="lname" style="grid-row:2; grid-column:1;">NPCI<small>Payout Rail</small></div>
+          <!-- Nodes injected here -->
+        </div>
+        <svg class="lines" id="lines"></svg>
+      </div>
+      
+      <div id="t-risk" class="risk-panel" style="display:none;"></div>
+      
+      <div style="display:flex; gap:12px; margin-top:24px;">
+        <button id="btn-approve" class="b-success" style="display:none; width:auto;">Approve (Compliance)</button>
+        <button id="btn-reject" class="b-err" style="display:none; width:auto;">Reject</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top: 24px;">
+      <h2>Recent Transfers</h2>
+      <div class="history-list" id="history"></div>
+    </div>
   </div>
-</main>
+</div>
+
+<div id="toasts"></div>
+
 <script>
-const STEPS=[["CREATE","Create","bank"],["LOCK_QUOTE","Lock quote","bank"],["SCREEN","Screen","bank"],["VERIFY_BENEFICIARY","Verify recipient","rail"],["CONFIRM_FUNDING","Fund","bank"],["SUBMIT_PAYOUT","Submit payout","rail"],["SETTLE_PAYOUT","Settle","rail"]];
-const $=id=>document.getElementById(id);
-let selected=null;
-const inr=p=>"₹"+(p/100).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
-const minor=()=>Math.round(parseFloat($("amount").value||0)*100);
-async function api(path,opts){const r=await fetch(path,opts);const j=await r.json();if(!r.ok)throw new Error(j.detail||"Request failed");return j}
-const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined});
+const STEPS = [
+  {id:"CREATE", name:"Create", org:"bank", row:1},
+  {id:"LOCK_QUOTE", name:"Lock Quote", org:"bank", row:1},
+  {id:"SCREEN", name:"Screen", org:"bank", row:1},
+  {id:"VERIFY_BENEFICIARY", name:"Verify", org:"rail", row:2},
+  {id:"CONFIRM_FUNDING", name:"Fund", org:"bank", row:1},
+  {id:"SUBMIT_PAYOUT", name:"Submit", org:"rail", row:2},
+  {id:"SETTLE_PAYOUT", name:"Settle", org:"rail", row:2}
+];
 
-async function init(){
-  const h=await api("/api/health");$("mode").textContent=h.ledgerMode==="drunix"?"Connected to a Drunix network":"Demo mode: in-process ledger with the same rules as the chaincode";
-  const c=await api("/api/corridors");
-  $("corridor").innerHTML=Object.entries(c).map(([k,v])=>`<option value="${k}">${v.name} (${v.ccy})</option>`).join("");
-  ["corridor","amount"].forEach(i=>$(i).addEventListener("input",debounce(preview,250)));
-  preview();refresh();
-}
-function debounce(f,ms){let t;return()=>{clearTimeout(t);t=setTimeout(f,ms)}}
+const $ = id => document.getElementById(id);
+let currentId = null;
+let ws = null;
 
-async function preview(){
-  try{
-    const q=await api(`/api/quote?corridor=${$("corridor").value}&amountMinor=${minor()}`);
-    const pct=(q.costBps/100).toFixed(2),bench=(q.benchmarkCostBps/100).toFixed(2),w=Math.min(100,q.costBps/q.benchmarkCostBps*100);
-    $("quote").innerHTML=`<div class="cap">Recipient gets</div><div class="recv">${inr(q.receivePaise)}</div>
-      <div class="kv"><span>Fee</span><b>${(q.feeTotalMinor/100).toFixed(2)} ${q.sendCurrency}</b>
-      <span>Rate you get</span><b>${(q.effectiveRateMicro/1e6).toFixed(4)}</b>
-      <span>Mid-market rate</span><b>${(q.midRateMicro/1e6).toFixed(4)}</b></div>
-      <div class="bar" aria-hidden="true"><i style="width:${w}%"></i></div>
-      <div class="cap">All-in cost ${pct}% of the amount. Typical bank transfer: about ${bench}%.</div>`;
-    $("err").textContent="";
-  }catch(e){$("quote").innerHTML=`<div class="cap">${e.message}</div>`}
+async function api(path, opts={}) {
+  const r = await fetch(path, opts);
+  const j = await r.json();
+  if(!r.ok) throw new Error(j.detail || "API Error");
+  return j;
 }
 
-function payload(){return{corridor:$("corridor").value,senderName:$("sender").value,beneficiaryName:$("benName").value,
-  beneficiaryVpa:$("vpa").value,purpose:$("purpose").value,amountMinor:minor(),scenario:$("scenario").value}}
+const formatMoney = (minor, ccy, decimals=2) => {
+  const major = minor / Math.pow(10, decimals);
+  return new Intl.NumberFormat('en-US', {style:'currency', currency:ccy}).format(major);
+};
 
-async function send(auto){
-  $("err").textContent="";
-  try{
-    const r=await post("/api/remittances",payload());selected=r.id;
-    if(auto){$("sendRun").disabled=true;await post(`/api/remittances/${r.id}/run`)}
-  }catch(e){$("err").textContent=e.message}
-  $("sendRun").disabled=false;refresh();
-}
-$("sendRun").onclick=()=>send(true);$("sendStep").onclick=()=>send(false);
-
-async function act(kind,rid,extra){
-  try{await post(`/api/remittances/${rid}/${kind}`,extra)}catch(e){$("err").textContent=e.message}
-  refresh();
-}
-
-async function refresh(){
-  const [list,stats]=await Promise.all([api("/api/remittances"),api("/api/stats")]);
-  $("list").innerHTML=list.length?"":`<div class="empty">Nothing sent yet.</div>`;
-  list.forEach(r=>{const b=document.createElement("button");b.setAttribute("aria-current",r.id===selected);
-    b.innerHTML=`<span><span class="mono">${r.id}</span> ${r.corridor}</span><span class="badge ${r.status}">${r.status.replace(/_/g," ").toLowerCase()}</span>`;
-    b.onclick=()=>{selected=r.id;refresh()};$("list").appendChild(b)});
-  $("stats").innerHTML=`<div><b>${stats.total}</b>transfers</div><div><b>${stats.settled}</b>settled</div>
-   <div><b>${stats.avgCostBps==null?"n/a":(stats.avgCostBps/100).toFixed(2)+"%"}</b>average cost</div>
-   <div><b>${stats.avgSettleSeconds==null?"n/a":stats.avgSettleSeconds+"s"}</b>average time to settle</div>`;
-  if(selected)renderDetail(list.find(r=>r.id===selected));
+// --- Initialization ---
+async function init() {
+  setupNodes();
+  connectWS();
+  
+  const h = await api("/api/health");
+  const c = await api("/api/corridors");
+  
+  $("corridor").innerHTML = Object.entries(c).map(([k,v])=>`<option value="${k}">${v.flag} ${v.name} (${v.ccy})</option>`).join("");
+  
+  ["corridor", "amount"].forEach(el => $(el).addEventListener("input", debounce(updateQuote, 300)));
+  updateQuote();
+  refreshList();
+  refreshStats();
 }
 
-function renderDetail(r){
-  if(!r)return;
-  const done={};r.trail.forEach(t=>done[t.step]=t);
-  const next=STEPS.findIndex(s=>!done[s[0]]);
-  const nodes=STEPS.map((s,i)=>{const col=i+2,row=s[2]==="bank"?1:2;
-    return `<div class="node ${s[2]} ${done[s[0]]?"done":""} ${i===next&&!["REFUNDED","BLOCKED","FAILED","EXPIRED","BENEFICIARY_REJECTED","HELD"].includes(r.status)?"now":""}" style="grid-column:${col};grid-row:${row}" id="n${i}">${done[s[0]]?"✓":""}</div>`}).join("");
-  const exc=r.trail.filter(t=>!STEPS.some(s=>s[0]===t.step)||["BLOCKED","BENEFICIARY_REJECTED","HELD","EXPIRED","FAILED"].includes(t.status));
-  const terminal=["SETTLED","REFUNDED"].includes(r.status);
-  const q=r.quote;
-  $("detail").innerHTML=`
-   <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:8px">
-     <span class="mono">${r.id}</span><span class="badge ${r.status}">${r.status.replace(/_/g," ").toLowerCase()}</span>
-     ${q?`<span class="cap">${(q.sendAmountMinor/100).toFixed(2)} ${q.sendCurrency} to ${inr(q.receivePaise)}</span>`:""}
-     ${r.riskScore?`<span class="cap">risk score ${r.riskScore}/100${r.reasonCodes.length?": "+r.reasonCodes.join(", ").toLowerCase().replace(/_/g," "):""}</span>`:""}</div>
-   <div class="lanes" id="lanes"><svg id="wire"></svg>
-     <div class="lname" style="grid-row:1;grid-column:1">Remitting bank<small>Citi</small></div>
-     <div class="lname" style="grid-row:2;grid-column:1">Payout rail<small>NPCI, UPI</small></div>${nodes}</div>
-   <div class="steps"><span></span>${STEPS.map(s=>`<span>${s[1]}</span>`).join("")}</div>
-   ${r.failReason?`<div class="exc">${r.failReason.replace(/_/g," ").toLowerCase()}</div>`:""}
-   ${r.status==="EXPIRED"?`<div class="exc">The locked quote expired before funding, so no money moved.</div>`:""}
-   <div class="actions">
-     <button id="bStep" ${terminal||r.status==="HELD"?"disabled":""}>Next step</button>
-     <button id="bRun" class="ghost" ${terminal||r.status==="HELD"?"disabled":""}>Run to end</button>
-     ${r.status==="HELD"?`<button id="bOk">Approve as compliance officer</button><button id="bNo" class="ghost">Reject</button>`:""}
-   </div>
-   <table class="trail"><tr><th>Step</th><th>Signed by</th><th>Transaction</th></tr>
-   ${r.trail.map(t=>`<tr><td>${t.step.replace(/_/g," ").toLowerCase()}</td><td>${t.org==="Org1MSP"?"Remitting bank":"Payout rail"}</td><td class="mono">${t.txId.slice(0,16)}…</td></tr>`).join("")}</table>`;
-  const id=r.id;
-  if($("bStep"))$("bStep").onclick=()=>act("step",id);
-  if($("bRun"))$("bRun").onclick=()=>act("run",id);
-  if($("bOk"))$("bOk").onclick=()=>act("review",id,{approve:true});
-  if($("bNo"))$("bNo").onclick=()=>act("review",id,{approve:false});
-  drawWire(Object.keys(done));
+function debounce(f, ms) { let t; return ()=> { clearTimeout(t); t=setTimeout(f,ms); }; }
+
+// --- WebSocket ---
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}/ws/events`);
+  ws.onopen = () => { $("ws-status").className = "badge b-success"; $("ws-status").innerText = "Live"; };
+  ws.onclose = () => { $("ws-status").className = "badge b-err"; $("ws-status").innerText = "Disconnected"; setTimeout(connectWS, 3000); };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    showToast(`Update: ${msg.status.replace(/_/g, " ")}`, `Transfer ${msg.remittanceId}`);
+    refreshStats();
+    refreshList();
+    if (msg.remittanceId === currentId) loadDetail(currentId);
+  };
 }
-function drawWire(doneSteps){
-  const box=$("lanes"),svg=$("wire");if(!box)return;const b=box.getBoundingClientRect();
-  const pts=STEPS.map((s,i)=>{const e=$("n"+i).getBoundingClientRect();return[e.left-b.left+e.width/2,e.top-b.top+e.height/2,doneSteps.includes(s[0])]});
-  const css=getComputedStyle(document.documentElement);
-  svg.innerHTML=pts.slice(1).map((p,i)=>`<line x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${p[0]}" y2="${p[1]}" stroke="${pts[i][2]&&p[2]?css.getPropertyValue("--ink"):css.getPropertyValue("--line")}" stroke-width="2"/>`).join("");
+
+// --- Quote ---
+async function updateQuote() {
+  try {
+    const amount = parseInt($("amount").value) * 100; // simplistic, assumes 2 decimals for input
+    const corr = $("corridor").value;
+    const comp = await api(`/api/compare?corridor=${corr}&amountMinor=${amount}`);
+    
+    $("q-recv").innerText = formatMoney(comp.remitChainReceivePaise, 'INR', 2);
+    $("q-rate").innerText = `1 = ${formatMoney((comp.providers[0]?.costBps || 0) * 0, 'INR').replace('₹0.00', '')} ...`; // Simplified
+    $("q-fee").innerText = "Blockchain Fixed";
+    
+    const save = comp.savingsVsBankWire.perTransferPaise;
+    $("q-save").innerText = `✨ You save ${formatMoney(save, 'INR', 2)} vs Bank Wire`;
+  } catch(e) {}
 }
-window.addEventListener("resize",()=>refresh());
+
+// --- Actions ---
+$("sendBtn").onclick = async () => {
+  try {
+    $("sendBtn").disabled = true;
+    const payload = {
+      corridor: $("corridor").value,
+      senderName: "User",
+      beneficiaryName: $("benName").value,
+      beneficiaryVpa: $("vpa").value,
+      purpose: $("purpose").value,
+      amountMinor: parseInt($("amount").value) * 100,
+      scenario: $("scenario").value
+    };
+    const r = await api("/api/remittances", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+    currentId = r.id;
+    await api(`/api/remittances/${r.id}/run`, {method:"POST"});
+    loadDetail(currentId);
+  } finally {
+    $("sendBtn").disabled = false;
+  }
+};
+
+$("btn-approve").onclick = async () => {
+  await api(`/api/remittances/${currentId}/review`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({approve:true})});
+  await api(`/api/remittances/${currentId}/run`, {method:"POST"});
+};
+
+$("btn-reject").onclick = async () => {
+  await api(`/api/remittances/${currentId}/review`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({approve:false})});
+};
+
+// --- UI Updates ---
+function setupNodes() {
+  const lanes = $("lanes");
+  STEPS.forEach((s, i) => {
+    lanes.innerHTML += `
+      <div class="node" id="n-${s.id}" style="grid-column:${i+2}; grid-row:${s.row};">
+        <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        <div style="position:absolute; top:50px; width:100px; text-align:center; font-size:11px; color:var(--muted);">${s.name}</div>
+      </div>
+    `;
+  });
+  
+  // Draw lines
+  setTimeout(drawLines, 100);
+}
+
+function drawLines() {
+  const svg = $("lines");
+  svg.innerHTML = "";
+  const lanes = $("lanes").getBoundingClientRect();
+  
+  for(let i=0; i<STEPS.length-1; i++) {
+    const n1 = $(`n-${STEPS[i].id}`).getBoundingClientRect();
+    const n2 = $(`n-${STEPS[i+1].id}`).getBoundingClientRect();
+    
+    const x1 = n1.left - lanes.left + n1.width/2;
+    const y1 = n1.top - lanes.top + n1.height/2;
+    const x2 = n2.left - lanes.left + n2.width/2;
+    const y2 = n2.top - lanes.top + n2.height/2;
+    
+    svg.innerHTML += `<path id="l-${i}" class="line-path" d="M ${x1} ${y1} L ${x2} ${y2}" />`;
+  }
+}
+
+async function refreshList() {
+  const list = await api("/api/remittances");
+  $("history").innerHTML = list.map(r => `
+    <div class="h-item ${r.id === currentId ? 'selected' : ''}" onclick="currentId='${r.id}'; loadDetail('${r.id}'); refreshList();">
+      <div>
+        <div style="font-family:var(--mono);">${r.id}</div>
+        <div style="font-size:12px; color:var(--muted);">${r.corridor}</div>
+      </div>
+      <div class="badge ${r.status === 'SETTLED' ? 'b-success' : (['REFUNDED','BLOCKED'].includes(r.status) ? 'b-err' : 'b-warn')}">
+        ${r.status}
+      </div>
+    </div>
+  `).join("");
+}
+
+async function refreshStats() {
+  const s = await api("/api/stats");
+  $("stats").innerHTML = `
+    <div>Total: <span style="color:#fff">${s.total}</span></div>
+    <div>Settled: <span style="color:var(--success)">${s.settled}</span></div>
+    <div>Avg Cost: <span style="color:var(--accent)">${(s.avgCostBps/100).toFixed(2)}%</span></div>
+  `;
+}
+
+async function loadDetail(id) {
+  if (!id) return;
+  const r = await api(`/api/remittances/${id}`);
+  
+  $("t-status").innerText = r.status;
+  $("t-status").className = `badge ${r.status === 'SETTLED' ? 'b-success' : (['REFUNDED','BLOCKED','FAILED'].includes(r.status) ? 'b-err' : 'b-warn')}`;
+  
+  $("t-info").innerHTML = `ID: ${r.id} | Corridor: ${r.corridor}`;
+  
+  // Update nodes and lines
+  const trail = r.trail.map(t => t.step);
+  
+  STEPS.forEach((s, i) => {
+    const node = $(`n-${s.id}`);
+    node.className = "node";
+    if (trail.includes(s.id)) {
+      node.classList.add("done");
+      if (s.org === 'rail') node.classList.add("rail");
+    }
+  });
+  
+  // Highlight active line
+  for(let i=0; i<STEPS.length-1; i++) {
+    const line = $(`l-${i}`);
+    if (line) {
+      if (trail.includes(STEPS[i].id) && trail.includes(STEPS[i+1].id)) {
+        line.style.stroke = "var(--accent)";
+        line.classList.remove("active");
+      } else if (trail.includes(STEPS[i].id) && !['SETTLED','REFUNDED','FAILED','BLOCKED'].includes(r.status)) {
+        line.classList.add("active");
+      } else {
+        line.style.stroke = "var(--panel-border)";
+        line.classList.remove("active");
+      }
+    }
+  }
+
+  // Risk panel
+  if (r.status === 'HELD' || r.riskScore) {
+    $("t-risk").style.display = "block";
+    let color = "var(--success)";
+    if (r.riskScore >= 60) color = "var(--warning)";
+    if (r.riskScore >= 85) color = "var(--danger)";
+    
+    $("t-risk").innerHTML = `
+      <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+        <span style="font-weight:600;">AI Risk Score</span>
+        <span style="font-family:var(--mono); color:${color}">${r.riskScore}/100</span>
+      </div>
+      <div class="risk-bar-bg">
+        <div class="risk-bar-fill" style="width:${r.riskScore}%; background:${color};"></div>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-top:8px;">
+        Reasons: ${r.reasonCodes ? r.reasonCodes.join(", ") : "None"}
+      </div>
+    `;
+    
+    if (r.status === 'HELD') {
+      $("btn-approve").style.display = "inline-block";
+      $("btn-reject").style.display = "inline-block";
+    } else {
+      $("btn-approve").style.display = "none";
+      $("btn-reject").style.display = "none";
+    }
+  } else {
+    $("t-risk").style.display = "none";
+    $("btn-approve").style.display = "none";
+    $("btn-reject").style.display = "none";
+  }
+}
+
+function showToast(title, body) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.innerHTML = `
+    <div class="toast-icon">⚡</div>
+    <div>
+      <div style="font-weight:600; font-size:13px; color:#fff;">${title}</div>
+      <div style="font-size:12px; color:var(--muted); margin-top:2px;">${body}</div>
+    </div>
+  `;
+  $("toasts").appendChild(t);
+  setTimeout(() => t.classList.add("show"), 10);
+  setTimeout(() => {
+    t.classList.remove("show");
+    setTimeout(() => t.remove(), 300);
+  }, 4000);
+}
+
 init();
 </script>
 </body>
