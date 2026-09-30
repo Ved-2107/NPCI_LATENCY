@@ -107,6 +107,7 @@ class Orchestrator:
             if r["status"] in TERMINAL or r["status"] == "HELD":
                 return r
             self.step(rid)
+            time.sleep(0.8)
         return self.ledger.GetRemittance(rid)
 
     def review(self, rid: str, approve: bool) -> dict:

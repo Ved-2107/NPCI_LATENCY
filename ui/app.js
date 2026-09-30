@@ -355,3 +355,22 @@ async function loadInsights() {
 }
 
 init();
+
+let ws;
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
+  ws.onmessage = (msg) => {
+    try {
+      const e = JSON.parse(msg.data);
+      if (e.type === 'state_change') {
+        if (document.getElementById('track-detail-view').style.display === 'block' && document.getElementById('dt-ref').innerText === e.remittanceId) {
+          openDetail(e.remittanceId);
+        }
+      }
+    } catch(err){}
+  };
+  ws.onclose = () => setTimeout(connectWS, 2000);
+}
+connectWS();
+
