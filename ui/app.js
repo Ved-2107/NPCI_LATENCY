@@ -260,7 +260,18 @@ async function openDetail(rid) {
     
     // Check terminal exceptions
     const exc = r.trail.find(t => ['BLOCKED', 'HELD', 'REFUND', 'FAIL_PAYOUT'].includes(t.step));
-    if (exc) {
+    
+    if (r.status === 'HELD') {
+      html += `
+        <div class="tl-item done">
+          <div class="tl-dot" style="background:var(--warn-txt); border-color:var(--warn-txt);"></div>
+          <div class="tl-content">
+            <div class="tl-title" style="color:var(--warn-txt);">Transfer Held for Review</div>
+            <div class="tl-meta">Action Required in Compliance Desk</div>
+          </div>
+        </div>
+      `;
+    } else if (exc) {
       html += `
         <div class="tl-item done">
           <div class="tl-dot" style="background:var(--err-txt); border-color:var(--err-txt);"></div>
