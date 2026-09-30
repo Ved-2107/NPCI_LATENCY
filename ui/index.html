@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RemitChain · cross-border remittance on Drunix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14222B; --mist:#E8EDEF; --panel:#FFFFFF; --line:#CBD5DA; --muted:#5A6B75;
+  --bank:#3A4FA0; --rail:#0B7A75; --alert:#C4472D; --hold:#A8720E;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{--ink:#E6EDF0;--mist:#0F1A21;--panel:#16252E;--line:#2C3E49;--muted:#93A5AF;--bank:#8DA0F0;--rail:#4CC2BB;--alert:#F0866D;--hold:#E2B24F}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--mist);color:var(--ink);font:15px/1.5 var(--font)}
+header{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:baseline;padding:24px 32px 8px}
+h1{font-size:28px;margin:0;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--muted);max-width:60ch}
+.mode{margin-left:auto;font-size:13px;color:var(--muted)}
+main{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:24px;padding:16px 32px 48px;align-items:start}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:16px}header{padding:20px 16px 8px}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px}
+h2{font-size:16px;margin:0 0 14px;font-weight:600}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 4px}
+input,select,button{font:inherit;color:inherit}
+input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--bank);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:4px;font-weight:500}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.quote{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.recv{font-size:30px;font-weight:600;letter-spacing:-.02em}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 16px;font-size:13px;color:var(--muted);margin:8px 0}
+.kv b{color:var(--ink);font-weight:500;text-align:right}
+.bar{position:relative;height:10px;background:var(--mist);border-radius:2px;margin:10px 0 4px}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--rail);border-radius:2px}
+.cap{font-size:12px;color:var(--muted)}
+.lanes{position:relative;display:grid;grid-template-columns:110px repeat(7,1fr);grid-template-rows:64px 64px;align-items:center;margin:8px 0 4px}
+.lanes svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.lname{font-size:13px;font-weight:600;padding-right:8px}
+.lname small{display:block;font-weight:400;color:var(--muted)}
+.node{justify-self:center;width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:var(--panel);display:grid;place-items:center;font-size:12px;position:relative;z-index:1}
+.node.bank.done{background:var(--bank);border-color:var(--bank);color:var(--panel)}
+.node.rail.done{background:var(--rail);border-color:var(--rail);color:var(--panel)}
+.node.now{outline:3px solid color-mix(in srgb,var(--hold) 45%,transparent)}
+.steps{display:grid;grid-template-columns:110px repeat(7,1fr);font-size:12px;color:var(--muted);text-align:center}
+.steps span{padding:0 2px}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:500;border:1px solid var(--line)}
+.badge.SETTLED{color:var(--rail);border-color:var(--rail)}
+.badge.REFUNDED,.badge.BLOCKED,.badge.FAILED,.badge.EXPIRED,.badge.BENEFICIARY_REJECTED{color:var(--alert);border-color:var(--alert)}
+.badge.HELD{color:var(--hold);border-color:var(--hold)}
+.exc{margin:12px 0 0;padding:10px 12px;border-left:3px solid var(--alert);background:var(--mist);font-size:13px}
+.trail{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.trail td,.trail th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;font-weight:400}
+.trail th{color:var(--muted)}
+.mono{font-family:var(--mono);font-size:12px}
+.list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
+.list button{display:flex;justify-content:space-between;gap:12px;background:transparent;color:var(--ink);border:1px solid var(--line);text-align:left;font-weight:400}
+.list button[aria-current=true]{border-color:var(--bank)}
+.stats{display:flex;flex-wrap:wrap;gap:8px 28px;margin-top:6px}
+.stats div{font-size:13px;color:var(--muted)} .stats b{display:block;font-size:20px;color:var(--ink);font-weight:600}
+.empty{color:var(--muted);padding:24px 0}
+.stack{display:flex;flex-direction:column;gap:24px}
+.err{color:var(--alert);font-size:13px;margin-top:8px;min-height:1em}
+@media (prefers-reduced-motion:no-preference){.node{transition:background .25s,border-color .25s}}
+</style>
+</head>
+<body>
+<header>
+  <h1>RemitChain</h1>
+  <p class="sub">Send money to India. Every step is signed by the bank or the payout rail on a shared Drunix ledger, and the full cost is fixed before you pay.</p>
+  <span class="mode" id="mode"></span>
+</header>
+<main>
+  <div class="stack">
+    <section aria-labelledby="send-h">
+      <h2 id="send-h">Send money</h2>
+      <label for="corridor">Corridor</label><select id="corridor"></select>
+      <div class="row">
+        <div><label for="amount">You send</label><input id="amount" type="number" min="10" step="0.01" value="1000"></div>
+        <div><label for="purpose">Purpose</label>
+          <select id="purpose"><option>FAMILY_MAINTENANCE</option><option>EDUCATION</option><option>MEDICAL</option><option>GIFT</option><option>INVESTMENT</option><option>TRAVEL</option></select></div>
+      </div>
+      <label for="sender">Your name</label><input id="sender" value="Asha Rao">
+      <label for="benName">Recipient name</label><input id="benName" value="Meera Rao">
+      <label for="vpa">Recipient UPI address</label><input id="vpa" value="meera@okbank">
+      <label for="scenario">Demo scenario</label>
+      <select id="scenario">
+        <option value="happy">Normal transfer</option>
+        <option value="high_risk">High risk, needs compliance review</option>
+        <option value="sanctions_hit">Sanctions match, blocked</option>
+        <option value="bad_beneficiary">Recipient name does not match</option>
+        <option value="payout_fail">Payout fails, sender refunded</option>
+        <option value="quote_expired">Quote expires before funding</option>
+      </select>
+      <div class="actions">
+        <button id="sendRun">Send now</button>
+        <button id="sendStep" class="ghost">Create, then step through</button>
+      </div>
+      <div class="err" id="err" role="alert"></div>
+      <div class="quote" id="quote"></div>
+    </section>
+    <section aria-labelledby="stats-h">
+      <h2 id="stats-h">Network results</h2>
+      <div class="stats" id="stats"></div>
+    </section>
+  </div>
+  <div class="stack">
+    <section aria-labelledby="lane-h">
+      <h2 id="lane-h">Transfer on the ledger</h2>
+      <div id="detail"><div class="empty">No transfer selected. Send money to see each signed step appear here.</div></div>
+    </section>
+    <section aria-labelledby="recent-h">
+      <h2 id="recent-h">Recent transfers</h2>
+      <div class="list" id="list"></div>
+    </section>
+  </div>
+</main>
+<script>
+const STEPS=[["CREATE","Create","bank"],["LOCK_QUOTE","Lock quote","bank"],["SCREEN","Screen","bank"],["VERIFY_BENEFICIARY","Verify recipient","rail"],["CONFIRM_FUNDING","Fund","bank"],["SUBMIT_PAYOUT","Submit payout","rail"],["SETTLE_PAYOUT","Settle","rail"]];
+const $=id=>document.getElementById(id);
+let selected=null;
+const inr=p=>"₹"+(p/100).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const minor=()=>Math.round(parseFloat($("amount").value||0)*100);
+async function api(path,opts){const r=await fetch(path,opts);const j=await r.json();if(!r.ok)throw new Error(j.detail||"Request failed");return j}
+const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined});
+
+async function init(){
+  const h=await api("/api/health");$("mode").textContent=h.ledgerMode==="drunix"?"Connected to a Drunix network":"Demo mode: in-process ledger with the same rules as the chaincode";
+  const c=await api("/api/corridors");
+  $("corridor").innerHTML=Object.entries(c).map(([k,v])=>`<option value="${k}">${v.name} (${v.ccy})</option>`).join("");
+  ["corridor","amount"].forEach(i=>$(i).addEventListener("input",debounce(preview,250)));
+  preview();refresh();
+}
+function debounce(f,ms){let t;return()=>{clearTimeout(t);t=setTimeout(f,ms)}}
+
+async function preview(){
+  try{
+    const q=await api(`/api/quote?corridor=${$("corridor").value}&amountMinor=${minor()}`);
+    const pct=(q.costBps/100).toFixed(2),bench=(q.benchmarkCostBps/100).toFixed(2),w=Math.min(100,q.costBps/q.benchmarkCostBps*100);
+    $("quote").innerHTML=`<div class="cap">Recipient gets</div><div class="recv">${inr(q.receivePaise)}</div>
+      <div class="kv"><span>Fee</span><b>${(q.feeTotalMinor/100).toFixed(2)} ${q.sendCurrency}</b>
+      <span>Rate you get</span><b>${(q.effectiveRateMicro/1e6).toFixed(4)}</b>
+      <span>Mid-market rate</span><b>${(q.midRateMicro/1e6).toFixed(4)}</b></div>
+      <div class="bar" aria-hidden="true"><i style="width:${w}%"></i></div>
+      <div class="cap">All-in cost ${pct}% of the amount. Typical bank transfer: about ${bench}%.</div>`;
+    $("err").textContent="";
+  }catch(e){$("quote").innerHTML=`<div class="cap">${e.message}</div>`}
+}
+
+function payload(){return{corridor:$("corridor").value,senderName:$("sender").value,beneficiaryName:$("benName").value,
+  beneficiaryVpa:$("vpa").value,purpose:$("purpose").value,amountMinor:minor(),scenario:$("scenario").value}}
+
+async function send(auto){
+  $("err").textContent="";
+  try{
+    const r=await post("/api/remittances",payload());selected=r.id;
+    if(auto){$("sendRun").disabled=true;await post(`/api/remittances/${r.id}/run`)}
+  }catch(e){$("err").textContent=e.message}
+  $("sendRun").disabled=false;refresh();
+}
+$("sendRun").onclick=()=>send(true);$("sendStep").onclick=()=>send(false);
+
+async function act(kind,rid,extra){
+  try{await post(`/api/remittances/${rid}/${kind}`,extra)}catch(e){$("err").textContent=e.message}
+  refresh();
+}
+
+async function refresh(){
+  const [list,stats]=await Promise.all([api("/api/remittances"),api("/api/stats")]);
+  $("list").innerHTML=list.length?"":`<div class="empty">Nothing sent yet.</div>`;
+  list.forEach(r=>{const b=document.createElement("button");b.setAttribute("aria-current",r.id===selected);
+    b.innerHTML=`<span><span class="mono">${r.id}</span> ${r.corridor}</span><span class="badge ${r.status}">${r.status.replace(/_/g," ").toLowerCase()}</span>`;
+    b.onclick=()=>{selected=r.id;refresh()};$("list").appendChild(b)});
+  $("stats").innerHTML=`<div><b>${stats.total}</b>transfers</div><div><b>${stats.settled}</b>settled</div>
+   <div><b>${stats.avgCostBps==null?"n/a":(stats.avgCostBps/100).toFixed(2)+"%"}</b>average cost</div>
+   <div><b>${stats.avgSettleSeconds==null?"n/a":stats.avgSettleSeconds+"s"}</b>average time to settle</div>`;
+  if(selected)renderDetail(list.find(r=>r.id===selected));
+}
+
+function renderDetail(r){
+  if(!r)return;
+  const done={};r.trail.forEach(t=>done[t.step]=t);
+  const next=STEPS.findIndex(s=>!done[s[0]]);
+  const nodes=STEPS.map((s,i)=>{const col=i+2,row=s[2]==="bank"?1:2;
+    return `<div class="node ${s[2]} ${done[s[0]]?"done":""} ${i===next&&!["REFUNDED","BLOCKED","FAILED","EXPIRED","BENEFICIARY_REJECTED","HELD"].includes(r.status)?"now":""}" style="grid-column:${col};grid-row:${row}" id="n${i}">${done[s[0]]?"✓":""}</div>`}).join("");
+  const exc=r.trail.filter(t=>!STEPS.some(s=>s[0]===t.step)||["BLOCKED","BENEFICIARY_REJECTED","HELD","EXPIRED","FAILED"].includes(t.status));
+  const terminal=["SETTLED","REFUNDED"].includes(r.status);
+  const q=r.quote;
+  $("detail").innerHTML=`
+   <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:8px">
+     <span class="mono">${r.id}</span><span class="badge ${r.status}">${r.status.replace(/_/g," ").toLowerCase()}</span>
+     ${q?`<span class="cap">${(q.sendAmountMinor/100).toFixed(2)} ${q.sendCurrency} to ${inr(q.receivePaise)}</span>`:""}
+     ${r.riskScore?`<span class="cap">risk score ${r.riskScore}/100${r.reasonCodes.length?": "+r.reasonCodes.join(", ").toLowerCase().replace(/_/g," "):""}</span>`:""}</div>
+   <div class="lanes" id="lanes"><svg id="wire"></svg>
+     <div class="lname" style="grid-row:1;grid-column:1">Remitting bank<small>Citi</small></div>
+     <div class="lname" style="grid-row:2;grid-column:1">Payout rail<small>NPCI, UPI</small></div>${nodes}</div>
+   <div class="steps"><span></span>${STEPS.map(s=>`<span>${s[1]}</span>`).join("")}</div>
+   ${r.failReason?`<div class="exc">${r.failReason.replace(/_/g," ").toLowerCase()}</div>`:""}
+   ${r.status==="EXPIRED"?`<div class="exc">The locked quote expired before funding, so no money moved.</div>`:""}
+   <div class="actions">
+     <button id="bStep" ${terminal||r.status==="HELD"?"disabled":""}>Next step</button>
+     <button id="bRun" class="ghost" ${terminal||r.status==="HELD"?"disabled":""}>Run to end</button>
+     ${r.status==="HELD"?`<button id="bOk">Approve as compliance officer</button><button id="bNo" class="ghost">Reject</button>`:""}
+   </div>
+   <table class="trail"><tr><th>Step</th><th>Signed by</th><th>Transaction</th></tr>
+   ${r.trail.map(t=>`<tr><td>${t.step.replace(/_/g," ").toLowerCase()}</td><td>${t.org==="Org1MSP"?"Remitting bank":"Payout rail"}</td><td class="mono">${t.txId.slice(0,16)}…</td></tr>`).join("")}</table>`;
+  const id=r.id;
+  if($("bStep"))$("bStep").onclick=()=>act("step",id);
+  if($("bRun"))$("bRun").onclick=()=>act("run",id);
+  if($("bOk"))$("bOk").onclick=()=>act("review",id,{approve:true});
+  if($("bNo"))$("bNo").onclick=()=>act("review",id,{approve:false});
+  drawWire(Object.keys(done));
+}
+function drawWire(doneSteps){
+  const box=$("lanes"),svg=$("wire");if(!box)return;const b=box.getBoundingClientRect();
+  const pts=STEPS.map((s,i)=>{const e=$("n"+i).getBoundingClientRect();return[e.left-b.left+e.width/2,e.top-b.top+e.height/2,doneSteps.includes(s[0])]});
+  const css=getComputedStyle(document.documentElement);
+  svg.innerHTML=pts.slice(1).map((p,i)=>`<line x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${p[0]}" y2="${p[1]}" stroke="${pts[i][2]&&p[2]?css.getPropertyValue("--ink"):css.getPropertyValue("--line")}" stroke-width="2"/>`).join("");
+}
+window.addEventListener("resize",()=>refresh());
+init();
+</script>
+</body>
+</html>
