@@ -238,3 +238,69 @@ func (c *RemitContract) LockQuote(ctx contractapi.TransactionContextInterface,
 	r.Quote = q
 	return save(ctx, r, "LOCK_QUOTE", StQuoted)
 }
+
+// RecordScreening stores the risk decision. Thresholds are enforced here, so the
+// off-chain AI can score but cannot override policy.
+func (c *RemitContract) RecordScreening(ctx contractapi.TransactionContextInterface,
+	id string, riskScore int, sanctionsHit bool, reasonCodes string) error {
+	if err := requireMSP(ctx, RemitterMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StQuoted); err != nil {
+		return err
+	}
+	if riskScore < 0 || riskScore > 100 {
+		return fmt.Errorf("riskScore must be 0..100")
+	}
+	r.RiskScore = riskScore
+	r.ReasonCodes = []string{}
+	if reasonCodes != "" {
+		r.ReasonCodes = strings.Split(reasonCodes, ",")
+	}
+	if sanctionsHit || riskScore >= RiskBlockThreshold {
+		if sanctionsHit {
+			r.ReasonCodes = append(r.ReasonCodes, "SANCTIONS_HIT")
+		}
+		return save(ctx, r, "SCREEN", StBlocked)
+	}
+	now, err := txNow(ctx)
+	if err != nil {
+		return err
+	}
+	used, err := readVelocity(ctx, velocityKey(r.BeneficiaryHash, now))
+	if err != nil {
+		return err
+	}
+	if used+r.Quote.ReceivePaise > DailyBeneficiaryCapPaise {
+		r.ReasonCodes = append(r.ReasonCodes, "DAILY_CAP_EXCEEDED")
+		return save(ctx, r, "SCREEN", StHeld)
+	}
+	if riskScore >= RiskHoldThreshold {
+		return save(ctx, r, "SCREEN", StHeld)
+	}
+	return save(ctx, r, "SCREEN", StScreened)
+}
+
+// ReviewHold is the maker-checker step for held remittances (compliance officer at the remitting bank).
+func (c *RemitContract) ReviewHold(ctx contractapi.TransactionContextInterface,
+	id string, approve bool, note string) error {
+	if err := requireMSP(ctx, RemitterMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StHeld); err != nil {
+		return err
+	}
+	if approve {
+		return save(ctx, r, "REVIEW_APPROVE", StScreened)
+	}
+	r.FailReason = note
+	return save(ctx, r, "REVIEW_REJECT", StBlocked)
+}
