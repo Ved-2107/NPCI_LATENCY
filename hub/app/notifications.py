@@ -33,6 +33,10 @@ TEMPLATES = {
         "sender": "Recipient for transfer {id} has been verified.",
         "beneficiary": "You have a pending inbound transfer. Funds will arrive shortly.",
     },
+    "BENEFICIARY_REJECTED": {
+        "sender": "Transfer {id} rejected: recipient name does not match UPI records. A refund will be processed.",
+        "beneficiary": None,
+    },
     "FUNDED": {
         "sender": "Your transfer {id} has been funded. Payout is in progress.",
         "beneficiary": "An inbound transfer is being processed to your account.",

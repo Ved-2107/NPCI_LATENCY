@@ -33,7 +33,7 @@ def _is_round(amount_minor: int) -> bool:
     if amount_minor <= 0:
         return False
     magnitude = 10 ** (len(str(amount_minor)) - 1)
-    return amount_minor % (magnitude // 10) == 0 and amount_minor >= 100_000
+    return amount_minor >= 100_000 and amount_minor % (magnitude // 10) == 0
 
 
 def _unusual_hour(now: float) -> bool:

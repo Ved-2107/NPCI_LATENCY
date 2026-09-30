@@ -16,8 +16,7 @@ document.querySelectorAll('.nav-link').forEach(btn => {
       wizardNext(1);
       $('amount').value = '1000';
       $('confirm-check').checked = false;
-      $('btn-submit').disabled = false;
-      $('btn-submit').innerText = 'Submit Transfer';
+      $('btn-submit').disabled = true;
     }
     
     // Lazy load data based on tab
@@ -30,18 +29,23 @@ document.querySelectorAll('.nav-link').forEach(btn => {
     if (tabId === 'insights') loadInsights();
     
     // Close mobile menu if open
-    document.querySelector('.primary-nav').classList.remove('open');
+    const nav = document.querySelector('.primary-nav');
+    if (nav) nav.classList.remove('open');
   });
 });
 
-document.querySelector('.mobile-menu-btn').addEventListener('click', () => {
-  document.querySelector('.primary-nav').classList.toggle('open');
-});
+const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+if (mobileMenuBtn) {
+  mobileMenuBtn.addEventListener('click', () => {
+    document.querySelector('.primary-nav').classList.toggle('open');
+  });
+}
 
 // Utility
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
-  const j = await r.json();
+  const text = await r.text();
+  const j = text ? JSON.parse(text) : {};
   if (!r.ok) throw new Error(j.detail || "API Error");
   return j;
 }
@@ -71,7 +75,7 @@ async function init() {
   }
 }
 
-function debounce(f, ms) { let t; return ()=> { clearTimeout(t); t=setTimeout(f,ms); }; }
+function debounce(f, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => f(...args), ms); }; }
 
 $('amount').addEventListener('input', debounce(() => {
   if (document.getElementById('panel-2').classList.contains('active')) {
@@ -82,7 +86,7 @@ $('amount').addEventListener('input', debounce(() => {
 // Wizard Logic
 function wizardNext(step) {
   if (step === 2) {
-    if (!$('corridor').checkValidity() || !$('sender').checkValidity() || !$('benName').checkValidity() || !$('vpa').checkValidity()) {
+    if (!$('corridor').checkValidity() || !$('sender').checkValidity() || !$('benName').checkValidity() || !$('vpa').checkValidity() || !$('purpose').checkValidity()) {
       alert("Please fill all mandatory fields.");
       return;
     }
@@ -102,6 +106,7 @@ function wizardNext(step) {
 
 function resetWizard() {
   wizardNext(1);
+  $('amount').value = '1000';
   $('confirm-check').checked = false;
   $('btn-submit').disabled = true;
   $('c-ref').innerText = '--';
@@ -109,6 +114,10 @@ function resetWizard() {
 
 // Quote Fetching
 async function fetchQuote() {
+  // Validate input before calling API
+  if (!$('amount').value || isNaN($('amount').value)) return;
+
+  $('quote-loader').innerText = 'Calculating live quote...';
   $('quote-data').style.display = 'none';
   $('quote-loader').style.display = 'block';
   $('btn-to-review').disabled = true;
@@ -122,7 +131,7 @@ async function fetchQuote() {
     
     $('q-send').innerText = `${formatAmt(currentQuote.sendAmountMinor, dec)} ${currentQuote.sendCurrency}`;
     $('q-fee').innerText = `${formatAmt(currentQuote.feeTotalMinor, dec)} ${currentQuote.sendCurrency}`;
-    $('q-fund').innerText = `${formatAmt(currentQuote.sendAmountMinor + currentQuote.feeTotalMinor, dec)} ${currentQuote.sendCurrency}`;
+    $('q-fund').innerText = `${formatAmt(currentQuote.sendAmountMinor, dec)} ${currentQuote.sendCurrency}`;
     $('q-rate').innerText = `1 ${currentQuote.sendCurrency} = ${(currentQuote.effectiveRateMicro / 1e6).toFixed(4)} INR`;
     $('q-recv').innerText = formatInr(currentQuote.receivePaise);
     
@@ -141,7 +150,13 @@ function populateReview() {
   $('r-vpa').innerText = $('vpa').value;
   $('r-corridor').innerText = $('corridor').value;
   
-  $('r-financials').innerHTML = $('quote-data').innerHTML;
+  // Clone quote data without duplicating IDs
+  const quoteClone = $('quote-data').cloneNode(true);
+  quoteClone.removeAttribute('id');
+  quoteClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+  quoteClone.style.display = 'block';
+  $('r-financials').innerHTML = '';
+  $('r-financials').appendChild(quoteClone);
 }
 
 $('confirm-check').addEventListener('change', (e) => {
@@ -176,6 +191,7 @@ $('btn-submit').addEventListener('click', async () => {
     wizardNext(4);
   } catch (e) {
     alert(`Transfer failed: ${e.message}`);
+    $('btn-submit').disabled = false;
   } finally {
     $('btn-submit').innerText = 'Submit Transfer';
   }
@@ -183,6 +199,9 @@ $('btn-submit').addEventListener('click', async () => {
 
 // Tracking
 async function loadTransferList() {
+  // Don't load list if detail view is already showing
+  if ($('track-detail-view').style.display === 'block') return;
+  
   $('track-list-view').style.display = 'block';
   $('track-detail-view').style.display = 'none';
   const tbody = $('tx-table-body');
@@ -190,19 +209,38 @@ async function loadTransferList() {
     const list = await api("/api/remittances");
     if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No transfers found.</td></tr>`; return; }
     
-    tbody.innerHTML = list.map(r => `
-      <tr>
-        <td class="mono">${r.id}</td>
-        <td>${r.corridor}</td>
-        <td><span class="badge ${getStatusClass(r.status)}">${r.status}</span></td>
-        <td>${new Date(r.updatedAt * 1000).toLocaleString()}</td>
-        <td><button class="btn btn-secondary btn-sm" onclick="openDetail('${r.id}')">View</button></td>
-      </tr>
-    `).join("");
+    window._transferList = list;
+    renderTransferTable(list);
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error loading transfers.</td></tr>`;
   }
 }
+
+function renderTransferTable(list) {
+  const tbody = $('tx-table-body');
+  tbody.innerHTML = list.map(r => `
+    <tr>
+      <td class="mono">${r.id}</td>
+      <td>${r.corridor}</td>
+      <td><span class="badge ${getStatusClass(r.status)}">${r.status}</span></td>
+      <td>${new Date(r.updatedAt * 1000).toLocaleString()}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openDetail('${r.id}')">View</button></td>
+    </tr>
+  `).join("");
+}
+
+// Search functionality for transfer list
+$('search-tx').addEventListener('input', debounce(() => {
+  const q = $('search-tx').value.toLowerCase().trim();
+  if (!window._transferList) return;
+  if (!q) { renderTransferTable(window._transferList); return; }
+  const filtered = window._transferList.filter(r =>
+    r.id.toLowerCase().includes(q) ||
+    r.corridor.toLowerCase().includes(q) ||
+    r.status.toLowerCase().includes(q)
+  );
+  renderTransferTable(filtered);
+}, 300));
 
 function getStatusClass(status) {
   if (status === 'SETTLED') return 'b-success';
@@ -213,7 +251,12 @@ function getStatusClass(status) {
 
 function viewTransferDetail() {
   const rid = $('c-ref').innerText;
-  document.querySelector('[data-tab="track"]').click();
+  // Switch to track tab without triggering list load
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-tab="track"]').classList.add('active');
+  $('tab-track').classList.add('active');
+  $('breadcrumb').innerText = 'Home / Track transfer';
   openDetail(rid);
 }
 
@@ -309,6 +352,7 @@ async function openDetail(rid) {
 function closeDetail() {
   $('track-list-view').style.display = 'block';
   $('track-detail-view').style.display = 'none';
+  loadTransferList();
 }
 
 // Compliance Desk
@@ -384,4 +428,3 @@ function connectWS() {
   ws.onclose = () => setTimeout(connectWS, 2000);
 }
 connectWS();
-

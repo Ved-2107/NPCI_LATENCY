@@ -32,7 +32,7 @@ def compare(corridor: str, amount_minor: int) -> dict:
         cost_bps = rc_cost_bps if pid == "remitchain" else p["costBps"]
         # estimate receive amount: mid_receive * (1 - costBps/10000)
         est_receive = mid_receive * (10000 - cost_bps) // 10000 if pid != "remitchain" else rc_receive
-        saving_paise = est_receive - rc_receive if pid != "remitchain" else 0
+        saving_paise = rc_receive - est_receive if pid != "remitchain" else 0
         comparisons.append({
             "provider": p["name"],
             "type": p["type"],

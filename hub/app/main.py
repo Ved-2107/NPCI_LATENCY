@@ -42,6 +42,15 @@ def guard(fn, *a):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.on_event("startup")
+async def on_startup():
+    import asyncio
+    try:
+        broadcaster._loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+
 # ── Health & Metadata ────────────────────────────────────────────
 
 @app.get("/api/health")

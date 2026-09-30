@@ -259,11 +259,24 @@ func (c *RemitContract) RecordScreening(ctx contractapi.TransactionContextInterf
 	r.RiskScore = riskScore
 	r.ReasonCodes = []string{}
 	if reasonCodes != "" {
-		r.ReasonCodes = strings.Split(reasonCodes, ",")
+		for _, c := range strings.Split(reasonCodes, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				r.ReasonCodes = append(r.ReasonCodes, c)
+			}
+		}
 	}
 	if sanctionsHit || riskScore >= RiskBlockThreshold {
 		if sanctionsHit {
-			r.ReasonCodes = append(r.ReasonCodes, "SANCTIONS_HIT")
+			hasSanctions := false
+			for _, c := range r.ReasonCodes {
+				if c == "SANCTIONS_HIT" {
+					hasSanctions = true
+					break
+				}
+			}
+			if !hasSanctions {
+				r.ReasonCodes = append(r.ReasonCodes, "SANCTIONS_HIT")
+			}
 		}
 		return save(ctx, r, "SCREEN", StBlocked)
 	}
@@ -276,7 +289,16 @@ func (c *RemitContract) RecordScreening(ctx contractapi.TransactionContextInterf
 		return err
 	}
 	if used+r.Quote.ReceivePaise > DailyBeneficiaryCapPaise {
-		r.ReasonCodes = append(r.ReasonCodes, "DAILY_CAP_EXCEEDED")
+		hasCap := false
+		for _, c := range r.ReasonCodes {
+			if c == "DAILY_CAP_EXCEEDED" {
+				hasCap = true
+				break
+			}
+		}
+		if !hasCap {
+			r.ReasonCodes = append(r.ReasonCodes, "DAILY_CAP_EXCEEDED")
+		}
 		return save(ctx, r, "SCREEN", StHeld)
 	}
 	if riskScore >= RiskHoldThreshold {
@@ -354,8 +376,16 @@ func (c *RemitContract) ConfirmFunding(ctx contractapi.TransactionContextInterfa
 	if err != nil {
 		return err
 	}
-	if used+r.Quote.ReceivePaise > DailyBeneficiaryCapPaise {
-		return fmt.Errorf("daily beneficiary cap exceeded")
+	approved := false
+	for _, t := range r.Trail {
+		if t.Step == "REVIEW_APPROVE" {
+			approved = true
+			break
+		}
+	}
+	if !approved && used+r.Quote.ReceivePaise > DailyBeneficiaryCapPaise {
+		r.FailReason = "daily beneficiary cap exceeded"
+		return save(ctx, r, "CONFIRM_FUNDING_FAILED", StFailed)
 	}
 	if err := writeVelocity(ctx, vk, used+r.Quote.ReceivePaise); err != nil {
 		return err
@@ -431,6 +461,9 @@ func (c *RemitContract) FailPayout(ctx contractapi.TransactionContextInterface,
 	if err != nil {
 		return err
 	}
+	if r.Status == StFailed && r.FailReason == reason {
+		return nil
+	}
 	if err := requireStatus(r, StSubmitted); err != nil {
 		return err
 	}
@@ -455,12 +488,17 @@ func (c *RemitContract) Refund(ctx contractapi.TransactionContextInterface,
 		return fmt.Errorf("refundRef required")
 	}
 	if r.Funded {
-		now, err := txNow(ctx)
+		fundTS, err := txNow(ctx)
 		if err != nil {
 			return err
 		}
-		// Note: released against the refund-day bucket; acceptable for the prototype.
-		vk := velocityKey(r.BeneficiaryHash, now)
+		for _, t := range r.Trail {
+			if t.Step == "CONFIRM_FUNDING" {
+				fundTS = t.TS
+				break
+			}
+		}
+		vk := velocityKey(r.BeneficiaryHash, fundTS)
 		used, err := readVelocity(ctx, vk)
 		if err != nil {
 			return err

@@ -94,12 +94,13 @@ class MemoryLedger:
         r["riskScore"] = risk
         r["reasonCodes"] = [c for c in reason_codes.split(",") if c]
         if sanctions_hit or risk >= RISK_BLOCK:
-            if sanctions_hit:
+            if sanctions_hit and "SANCTIONS_HIT" not in r["reasonCodes"]:
                 r["reasonCodes"].append("SANCTIONS_HIT")
             return self._save(org, r, "SCREEN", "BLOCKED")
         used = self.vel.get(self._vk(r["beneficiaryHash"], self._now()), 0)
         if used + r["quote"]["receivePaise"] > DAILY_CAP_PAISE:
-            r["reasonCodes"].append("DAILY_CAP_EXCEEDED")
+            if "DAILY_CAP_EXCEEDED" not in r["reasonCodes"]:
+                r["reasonCodes"].append("DAILY_CAP_EXCEEDED")
             return self._save(org, r, "SCREEN", "HELD")
         self._save(org, r, "SCREEN", "HELD" if risk >= RISK_HOLD else "SCREENED")
 
@@ -127,8 +128,10 @@ class MemoryLedger:
             return self._save(org, r, "FUNDING_QUOTE_EXPIRED", "EXPIRED")
         vk = self._vk(r["beneficiaryHash"], now)
         used = self.vel.get(vk, 0)
-        if used + r["quote"]["receivePaise"] > DAILY_CAP_PAISE:
-            raise LedgerError("daily beneficiary cap exceeded")
+        approved = any(t["step"] == "REVIEW_APPROVE" for t in r.get("trail", []))
+        if not approved and used + r["quote"]["receivePaise"] > DAILY_CAP_PAISE:
+            r["failReason"] = "daily beneficiary cap exceeded"
+            return self._save(org, r, "CONFIRM_FUNDING_FAILED", "FAILED")
         self.vel[vk] = used + r["quote"]["receivePaise"]
         r["fundingRef"], r["funded"] = funding_ref, True
         self._save(org, r, "CONFIRM_FUNDING", "FUNDED")
@@ -160,7 +163,10 @@ class MemoryLedger:
 
     def FailPayout(self, org, rid, reason):
         self._need(org, PAYOUT)
-        r = self._get(rid); self._status(r, "PAYOUT_SUBMITTED")
+        r = self._get(rid)
+        if r["status"] == "FAILED" and r.get("failReason") == reason:
+            return
+        self._status(r, "PAYOUT_SUBMITTED")
         r["failReason"] = reason
         self._save(org, r, "FAIL_PAYOUT", "FAILED")
 
@@ -170,7 +176,13 @@ class MemoryLedger:
         if not refund_ref:
             raise LedgerError("refundRef required")
         if r["funded"]:
-            vk = self._vk(r["beneficiaryHash"], self._now())
+            # Use the funding timestamp so we deduct from the correct day's cap
+            fund_ts = self._now()
+            for t in r["trail"]:
+                if t["step"] == "CONFIRM_FUNDING":
+                    fund_ts = t["ts"]
+                    break
+            vk = self._vk(r["beneficiaryHash"], fund_ts)
             self.vel[vk] = max(0, self.vel.get(vk, 0) - r["quote"]["receivePaise"])
         r["refundRef"] = refund_ref
         self._save(org, r, "REFUND", "REFUNDED")
@@ -199,7 +211,7 @@ class DrunixLedger:
         self.orderer = os.environ.get("DRUNIX_ORDERER", "localhost:7050")
         self.orderer_ca = os.environ.get("DRUNIX_ORDERER_CA", "")
         self.peer = os.environ.get("DRUNIX_PEER_BIN", "peer")
-        self.env_dir = os.environ["DRUNIX_ORG_ENV_DIR"]
+        self.env_dir = os.environ.get("DRUNIX_ORG_ENV_DIR", "")
 
     def _env(self, org):
         env = dict(os.environ)
