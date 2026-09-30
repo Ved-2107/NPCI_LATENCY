@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# Never commit Drunix vendor clone or any generated key material
+drunix/
+crypto-config/
+organizations/
+channel-artifacts/
+*.env
+!env.example
