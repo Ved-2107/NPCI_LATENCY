@@ -1,0 +1,87 @@
+[
+  {
+    "name": "usd_1000",
+    "ccy": "USD",
+    "input": {
+      "sendMinor": 100000,
+      "midMicro": 88000000,
+      "spreadBps": 30,
+      "feeFlat": 100,
+      "feeBps": 10
+    },
+    "expect": {
+      "receivePaise": 8756052,
+      "feeTotalMinor": 200,
+      "costBps": 49,
+      "effectiveRateMicro": 87736000
+    }
+  },
+  {
+    "name": "aed_2500",
+    "ccy": "AED",
+    "input": {
+      "sendMinor": 250000,
+      "midMicro": 23950000,
+      "spreadBps": 25,
+      "feeFlat": 100,
+      "feeBps": 10
+    },
+    "expect": {
+      "receivePaise": 5964169,
+      "feeTotalMinor": 350,
+      "costBps": 38,
+      "effectiveRateMicro": 23890125
+    }
+  },
+  {
+    "name": "gbp_small",
+    "ccy": "GBP",
+    "input": {
+      "sendMinor": 5000,
+      "midMicro": 118500000,
+      "spreadBps": 35,
+      "feeFlat": 100,
+      "feeBps": 10
+    },
+    "expect": {
+      "receivePaise": 578027,
+      "feeTotalMinor": 105,
+      "costBps": 244,
+      "effectiveRateMicro": 118085250
+    }
+  },
+  {
+    "name": "sgd_large",
+    "ccy": "SGD",
+    "input": {
+      "sendMinor": 90000000,
+      "midMicro": 68500000,
+      "spreadBps": 30,
+      "feeFlat": 100,
+      "feeBps": 10
+    },
+    "expect": {
+      "receivePaise": 6140351665,
+      "feeTotalMinor": 90100,
+      "costBps": 39,
+      "effectiveRateMicro": 68294500
+    }
+  },
+  {
+    "name": "usd_no_fees",
+    "ccy": "USD",
+    "input": {
+      "sendMinor": 100000,
+      "midMicro": 88000000,
+      "spreadBps": 0,
+      "feeFlat": 0,
+      "feeBps": 0
+    },
+    "expect": {
+      "receivePaise": 8800000,
+      "feeTotalMinor": 0,
+      "costBps": 0,
+      "effectiveRateMicro": 88000000
+    }
+  }
+]
