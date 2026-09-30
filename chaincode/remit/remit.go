@@ -472,3 +472,51 @@ func (c *RemitContract) Refund(ctx contractapi.TransactionContextInterface,
 	r.RefundRef = refundRef
 	return save(ctx, r, "REFUND", StRefunded)
 }
+
+// ---------- queries ----------
+
+func (c *RemitContract) GetRemittance(ctx contractapi.TransactionContextInterface, id string) (*Remittance, error) {
+	return load(ctx, id)
+}
+
+func (c *RemitContract) ListRemittances(ctx contractapi.TransactionContextInterface) ([]*Remittance, error) {
+	it, err := ctx.GetStub().GetStateByRange("REM_", "REM`") // '`' sorts right after '_'
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+	out := []*Remittance{}
+	for it.HasNext() {
+		kv, err := it.Next()
+		if err != nil {
+			return nil, err
+		}
+		var r Remittance
+		if err := json.Unmarshal(kv.Value, &r); err != nil {
+			return nil, err
+		}
+		out = append(out, &r)
+	}
+	return out, nil
+}
+
+func (c *RemitContract) GetRemittanceHistory(ctx contractapi.TransactionContextInterface, id string) ([]HistoryEntry, error) {
+	it, err := ctx.GetStub().GetHistoryForKey(key(id))
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+	out := []HistoryEntry{}
+	for it.HasNext() {
+		m, err := it.Next()
+		if err != nil {
+			return nil, err
+		}
+		ts := ""
+		if m.Timestamp != nil {
+			ts = time.Unix(m.Timestamp.Seconds, int64(m.Timestamp.Nanos)).UTC().Format(time.RFC3339)
+		}
+		out = append(out, HistoryEntry{TxID: m.TxId, Timestamp: ts, IsDelete: m.IsDelete, Value: string(m.Value)})
+	}
+	return out, nil
+}
