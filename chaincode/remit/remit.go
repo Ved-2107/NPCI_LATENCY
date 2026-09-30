@@ -182,3 +182,59 @@ func writeVelocity(ctx contractapi.TransactionContextInterface, k string, v int6
 	return ctx.GetStub().PutState(k, b)
 }
 
+// ---------- transactions ----------
+
+// CreateRemittance registers a remittance. Only the remitting bank may call it.
+func (c *RemitContract) CreateRemittance(ctx contractapi.TransactionContextInterface,
+	id, corridor, senderHash, beneficiaryHash, purpose string) error {
+	if err := requireMSP(ctx, RemitterMSP); err != nil {
+		return err
+	}
+	if id == "" || corridor == "" || senderHash == "" || beneficiaryHash == "" {
+		return fmt.Errorf("id, corridor, senderHash and beneficiaryHash are required")
+	}
+	if !allowedPurposes[purpose] {
+		return fmt.Errorf("purpose %q not allowed", purpose)
+	}
+	if b, err := ctx.GetStub().GetState(key(id)); err != nil {
+		return err
+	} else if b != nil {
+		return fmt.Errorf("remittance %s already exists", id)
+	}
+	now, err := txNow(ctx)
+	if err != nil {
+		return err
+	}
+	r := &Remittance{DocType: "remittance", ID: id, Corridor: corridor, SenderHash: senderHash,
+		BeneficiaryHash: beneficiaryHash, Purpose: purpose, CreatedAt: now, ReasonCodes: []string{}}
+	return save(ctx, r, "CREATE", StCreated)
+}
+
+// LockQuote fixes the FX rate and every fee. The receive amount is computed here,
+// on-chain, so the sender sees the exact figure the payout leg must honour.
+func (c *RemitContract) LockQuote(ctx contractapi.TransactionContextInterface,
+	id, sendCcy string, sendAmountMinor, midRateMicro, spreadBps, feeFlatMinor, feeBps, validitySecs int64) error {
+	if err := requireMSP(ctx, RemitterMSP); err != nil {
+		return err
+	}
+	r, err := load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := requireStatus(r, StCreated); err != nil {
+		return err
+	}
+	if validitySecs <= 0 || validitySecs > maxQuoteValiditySecs {
+		return fmt.Errorf("validity must be 1..%d seconds", maxQuoteValiditySecs)
+	}
+	now, err := txNow(ctx)
+	if err != nil {
+		return err
+	}
+	q, err := ComputeQuote(sendCcy, sendAmountMinor, midRateMicro, spreadBps, feeFlatMinor, feeBps, now+validitySecs)
+	if err != nil {
+		return err
+	}
+	r.Quote = q
+	return save(ctx, r, "LOCK_QUOTE", StQuoted)
+}
