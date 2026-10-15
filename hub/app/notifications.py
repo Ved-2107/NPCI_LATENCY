@@ -4,8 +4,12 @@ Simulates SMS/email notifications at each state change and provides
 a beneficiary tracking endpoint. In production, replace the simulators
 with actual messaging service integrations (Twilio, SendGrid, etc.).
 """
+import logging
+import threading
 import time
 from datetime import datetime, timezone
+
+logger = logging.getLogger("remitchain.notifications")
 
 # Notification templates per status
 TEMPLATES = {
@@ -66,6 +70,7 @@ class NotificationService:
     def __init__(self):
         self.notifications: list = []
         self._max = 1000
+        self._lock = threading.Lock()
 
     def notify(self, remittance: dict, old_status: str = None):
         """Generate notifications for a state change."""
@@ -88,8 +93,9 @@ class NotificationService:
         now = time.time()
         iso = datetime.fromtimestamp(now, timezone.utc).isoformat()
 
+        new_notes = []
         if template["sender"]:
-            self.notifications.append({
+            new_notes.append({
                 "type": "sender",
                 "channel": "sms",
                 "remittanceId": remittance["id"],
@@ -101,7 +107,7 @@ class NotificationService:
             })
 
         if template["beneficiary"]:
-            self.notifications.append({
+            new_notes.append({
                 "type": "beneficiary",
                 "channel": "sms",
                 "remittanceId": remittance["id"],
@@ -112,23 +118,31 @@ class NotificationService:
                 "read": False,
             })
 
-        # Trim old notifications
-        if len(self.notifications) > self._max:
-            self.notifications = self.notifications[-self._max:]
+        with self._lock:
+            self.notifications.extend(new_notes)
+            if len(self.notifications) > self._max:
+                self.notifications = self.notifications[-self._max:]
+
+        for n in new_notes:
+            logger.info("Notification [%s] for %s (%s): %s", n["type"], remittance.get("id"), status, n["message"])
 
     def get_for_remittance(self, rid: str) -> list:
-        return [n for n in self.notifications if n["remittanceId"] == rid]
+        with self._lock:
+            return [n for n in self.notifications if n["remittanceId"] == rid]
 
     def get_all(self, limit: int = 50) -> list:
-        return list(reversed(self.notifications[-limit:]))
+        with self._lock:
+            return list(reversed(self.notifications[-limit:]))
 
     def unread_count(self) -> int:
-        return sum(1 for n in self.notifications if not n["read"])
+        with self._lock:
+            return sum(1 for n in self.notifications if not n["read"])
 
     def mark_read(self, rid: str):
-        for n in self.notifications:
-            if n["remittanceId"] == rid:
-                n["read"] = True
+        with self._lock:
+            for n in self.notifications:
+                if n["remittanceId"] == rid:
+                    n["read"] = True
 
 
 # Global instance

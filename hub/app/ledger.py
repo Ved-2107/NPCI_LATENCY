@@ -6,11 +6,15 @@ DrunixLedger  - real calls to the `remit` chaincode on a Drunix network via the 
 Select with LEDGER_MODE=memory|drunix.
 """
 import json
+import logging
 import os
 import subprocess
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger("remitchain.ledger")
 
 from .pricing import compute_quote
 
@@ -30,6 +34,7 @@ class MemoryLedger:
     def __init__(self):
         self.state, self.vel, self.payout_refs = {}, {}, {}
         self.history = {}
+        self._lock = threading.RLock()
 
     # -- helpers --
     def _now(self):
@@ -40,9 +45,10 @@ class MemoryLedger:
             raise LedgerError(f"caller org {org} not permitted; {want} required")
 
     def _get(self, rid):
-        if rid not in self.state:
-            raise LedgerError(f"remittance {rid} not found")
-        return json.loads(json.dumps(self.state[rid]))
+        with self._lock:
+            if rid not in self.state:
+                raise LedgerError(f"remittance {rid} not found")
+            return json.loads(json.dumps(self.state[rid]))
 
     def _status(self, r, *allowed):
         if r["status"] not in allowed:
@@ -52,7 +58,9 @@ class MemoryLedger:
         now = self._now()
         r["status"], r["updatedAt"] = status, now
         r["trail"].append({"step": step, "status": status, "org": org, "txId": uuid.uuid4().hex, "ts": now})
-        self.state[r["id"]] = r
+        with self._lock:
+            self.state[r["id"]] = r
+        logger.info("Ledger remittance %s status updated: %s (step: %s, org: %s)", r["id"], status, step, org)
         self.history.setdefault(r["id"], []).append({
             "txId": r["trail"][-1]["txId"],
             "timestamp": datetime.fromtimestamp(now, timezone.utc).isoformat(),
@@ -180,10 +188,12 @@ class MemoryLedger:
         return self._get(rid)
 
     def ListRemittances(self):
-        return sorted((json.loads(json.dumps(v)) for v in self.state.values()), key=lambda r: r["createdAt"])
+        with self._lock:
+            return sorted((json.loads(json.dumps(v)) for v in self.state.values()), key=lambda r: r["createdAt"])
 
     def GetRemittanceHistory(self, rid):
-        return self.history.get(rid, [])
+        with self._lock:
+            return list(self.history.get(rid, []))
 
 
 class DrunixLedger:

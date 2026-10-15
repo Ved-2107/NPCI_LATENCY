@@ -1,7 +1,9 @@
 """Drives one remittance through the chaincode state machine.
 Personal data (names, UPI addresses) stays here, off-ledger; only salted hashes go on-chain."""
 import hashlib
+import logging
 import os
+import threading
 import time
 import uuid
 
@@ -9,6 +11,8 @@ from . import fx, risk, upi
 from .events import broadcaster
 from .ledger import LedgerError, PAYOUT, REMITTER
 from .notifications import notifier
+
+logger = logging.getLogger("remitchain.orchestrator")
 
 SALT = os.environ.get("PII_SALT", "demo-salt-change-me")
 TERMINAL = {"SETTLED", "REFUNDED"}
@@ -25,6 +29,7 @@ class Orchestrator:
         self.meta = {}       # remittance id -> off-chain PII + scenario
         self.history = {}    # sender hash -> [{ts, amountMinor}]
         self.seen_ben = set()
+        self._lock = threading.RLock()
         self.step_delay = float(os.environ.get("STEP_DELAY", "0.8")) if step_delay is None else step_delay
         self.expired_delay = float(os.environ.get("EXPIRED_DELAY", "3.0")) if expired_delay is None else expired_delay
 
@@ -48,11 +53,13 @@ class Orchestrator:
             raise ValueError("unknown corridor")
         rid = "R" + uuid.uuid4().hex[:10].upper()
         sender_h, ben_h = h(p["senderName"]), h(p["beneficiaryVpa"])
-        self.meta[rid] = {**p, "scenario": scenario, "senderHash": sender_h,
-                          "newBeneficiary": ben_h not in self.seen_ben}
-        self.seen_ben.add(ben_h)
+        with self._lock:
+            self.meta[rid] = {**p, "scenario": scenario, "senderHash": sender_h,
+                              "newBeneficiary": ben_h not in self.seen_ben}
+            self.seen_ben.add(ben_h)
         self.ledger.CreateRemittance(REMITTER, rid, p["corridor"], sender_h, ben_h, p["purpose"])
         r = self.ledger.GetRemittance(rid)
+        logger.info("Remittance %s created for corridor %s (amount: %s minor)", rid, p["corridor"], p.get("amountMinor"))
         self._emit(r, "CREATE")
         return r
 
@@ -64,8 +71,10 @@ class Orchestrator:
         return q
 
     def step(self, rid: str) -> dict:
-        r, m = self.ledger.GetRemittance(rid), self.meta[rid]
-        st, sc = r["status"], m["scenario"]
+        with self._lock:
+            m = dict(self.meta.get(rid, {}))
+        r = self.ledger.GetRemittance(rid)
+        st, sc = r["status"], m.get("scenario", "happy")
         L = self.ledger
         if st == "CREATED":
             s = fx.schedule(m["corridor"])
@@ -73,12 +82,16 @@ class Orchestrator:
             L.LockQuote(REMITTER, rid, s["ccy"], m["amountMinor"], s["mid"], s["spread"], s["flat"], s["bps"], validity)
             self._emit(L.GetRemittance(rid), "LOCK_QUOTE")
         elif st == "QUOTED":
-            hist = self.history.get(m["senderHash"], [])
-            score, reasons = risk.score(m["amountMinor"], m["purpose"], hist, m["newBeneficiary"],
+            with self._lock:
+                hist = list(self.history.get(m["senderHash"], []))
+            score, reasons = risk.score(m["amountMinor"], m["purpose"], hist, m.get("newBeneficiary", False),
                                         force_high=(sc == "high_risk"))
             sanctions = sc == "sanctions_hit"
             L.RecordScreening(REMITTER, rid, score, sanctions, ",".join(reasons))
-            self.history.setdefault(m["senderHash"], []).append({"ts": time.time(), "amountMinor": m["amountMinor"]})
+            with self._lock:
+                self.history.setdefault(m["senderHash"], []).append({"ts": time.time(), "amountMinor": m["amountMinor"]})
+            if score >= 60:
+                logger.warning("Remittance %s compliance hold (score=%d, reasons=%s)", rid, score, reasons)
             self._emit(L.GetRemittance(rid), "SCREEN")
         elif st == "HELD":
             return {**r, "needsReview": True}
@@ -101,7 +114,9 @@ class Orchestrator:
         elif st in ("FAILED", "EXPIRED", "BLOCKED", "BENEFICIARY_REJECTED"):
             L.Refund(REMITTER, rid, "RFND-" + rid)
             self._emit(L.GetRemittance(rid), "REFUND")
-        return L.GetRemittance(rid)
+        curr = L.GetRemittance(rid)
+        logger.info("Remittance %s status transitioned from %s to %s", rid, st, curr.get("status"))
+        return curr
 
     def run(self, rid: str, max_steps: int = 12) -> dict:
         for _ in range(max_steps):

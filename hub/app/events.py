@@ -6,10 +6,14 @@ and a timestamp.
 """
 import asyncio
 import json
+import logging
+import threading
 import time
 from typing import Set
 
 from fastapi import WebSocket
+
+logger = logging.getLogger("remitchain.events")
 
 
 class EventBroadcaster:
@@ -19,38 +23,50 @@ class EventBroadcaster:
         self._connections: Set[WebSocket] = set()
         self._event_log: list = []
         self._max_log = 500
+        self._lock = threading.Lock()
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
-        self._connections.add(ws)
+        with self._lock:
+            self._connections.add(ws)
+            count = len(self._connections)
+        logger.info("WebSocket client connected. Active connections: %d", count)
 
     def disconnect(self, ws: WebSocket):
-        self._connections.discard(ws)
+        with self._lock:
+            self._connections.discard(ws)
+            count = len(self._connections)
+        logger.info("WebSocket client disconnected. Active connections: %d", count)
 
     async def broadcast(self, event: dict):
         """Send an event to all connected clients and log it."""
         event["timestamp"] = time.time()
         event["iso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        self._event_log.append(event)
-        if len(self._event_log) > self._max_log:
-            self._event_log = self._event_log[-self._max_log:]
+        with self._lock:
+            self._event_log.append(event)
+            if len(self._event_log) > self._max_log:
+                self._event_log = self._event_log[-self._max_log:]
+            targets = list(self._connections)
         message = json.dumps(event)
         dead = set()
-        for ws in self._connections:
+        for ws in targets:
             try:
                 await ws.send_text(message)
             except Exception:
                 dead.add(ws)
-        self._connections -= dead
+        if dead:
+            with self._lock:
+                self._connections -= dead
 
     def emit_sync(self, event: dict):
         """Non-async wrapper for use in synchronous ledger code.
         Schedules the broadcast on the running event loop if available."""
         event["timestamp"] = time.time()
         event["iso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        self._event_log.append(event)
-        if len(self._event_log) > self._max_log:
-            self._event_log = self._event_log[-self._max_log:]
+        with self._lock:
+            self._event_log.append(event)
+            if len(self._event_log) > self._max_log:
+                self._event_log = self._event_log[-self._max_log:]
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(self._broadcast_existing(event))
@@ -59,21 +75,27 @@ class EventBroadcaster:
 
     async def _broadcast_existing(self, event: dict):
         message = json.dumps(event)
+        with self._lock:
+            targets = list(self._connections)
         dead = set()
-        for ws in self._connections:
+        for ws in targets:
             try:
                 await ws.send_text(message)
             except Exception:
                 dead.add(ws)
-        self._connections -= dead
+        if dead:
+            with self._lock:
+                self._connections -= dead
 
     @property
     def recent_events(self) -> list:
-        return list(self._event_log)
+        with self._lock:
+            return list(self._event_log)
 
     @property
     def connection_count(self) -> int:
-        return len(self._connections)
+        with self._lock:
+            return len(self._connections)
 
 
 # Global broadcaster instance
