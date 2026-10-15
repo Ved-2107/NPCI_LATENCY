@@ -84,13 +84,17 @@ class MemoryLedger:
              "nameMatchScore": 0, "funded": False, "createdAt": self._now(), "trail": []}
         self._save(org, r, "CREATE", "CREATED")
 
-    def LockQuote(self, org, rid, ccy, send_minor, mid, spread, flat, bps, validity):
+    def _cap_for_corridor(self, corridor: str) -> int:
+        from .fx import CORRIDOR_DAILY_CAPS
+        return CORRIDOR_DAILY_CAPS.get(corridor, DAILY_CAP_PAISE)
+
+    def LockQuote(self, org, rid, ccy, send_minor, mid, spread, flat, bps, validity, decimals=None):
         self._need(org, REMITTER)
         r = self._get(rid); self._status(r, "CREATED")
         if not 0 < validity <= 900:
             raise LedgerError("validity must be 1..900 seconds")
         try:
-            r["quote"] = compute_quote(ccy, send_minor, mid, spread, flat, bps, self._now() + validity)
+            r["quote"] = compute_quote(ccy, send_minor, mid, spread, flat, bps, self._now() + validity, decimals=decimals)
         except ValueError as e:
             raise LedgerError(str(e))
         self._save(org, r, "LOCK_QUOTE", "QUOTED")
@@ -107,7 +111,8 @@ class MemoryLedger:
                 r["reasonCodes"].append("SANCTIONS_HIT")
             return self._save(org, r, "SCREEN", "BLOCKED")
         used = self.vel.get(self._vk(r["beneficiaryHash"], self._now()), 0)
-        if used + r["quote"]["receivePaise"] > DAILY_CAP_PAISE:
+        cap = self._cap_for_corridor(r.get("corridor", ""))
+        if used + r["quote"]["receivePaise"] > cap:
             r["reasonCodes"].append("DAILY_CAP_EXCEEDED")
             return self._save(org, r, "SCREEN", "HELD")
         self._save(org, r, "SCREEN", "HELD" if risk >= RISK_HOLD else "SCREENED")
@@ -116,6 +121,7 @@ class MemoryLedger:
         self._need(org, REMITTER)
         r = self._get(rid); self._status(r, "HELD")
         if approve:
+            r["capApproved"] = True
             return self._save(org, r, "REVIEW_APPROVE", "SCREENED")
         r["failReason"] = note
         self._save(org, r, "REVIEW_REJECT", "BLOCKED")
@@ -136,8 +142,10 @@ class MemoryLedger:
             return self._save(org, r, "FUNDING_QUOTE_EXPIRED", "EXPIRED")
         vk = self._vk(r["beneficiaryHash"], now)
         used = self.vel.get(vk, 0)
-        if used + r["quote"]["receivePaise"] > DAILY_CAP_PAISE:
-            raise LedgerError("daily beneficiary cap exceeded")
+        cap = self._cap_for_corridor(r.get("corridor", ""))
+        if used + r["quote"]["receivePaise"] > cap and not r.get("capApproved"):
+            r["failReason"] = "daily beneficiary cap exceeded"
+            return self._save(org, r, "CONFIRM_FUNDING", "BLOCKED")
         self.vel[vk] = used + r["quote"]["receivePaise"]
         r["fundingRef"], r["funded"] = funding_ref, True
         self._save(org, r, "CONFIRM_FUNDING", "FUNDED")

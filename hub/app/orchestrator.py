@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 
-from . import fx, risk, upi
+from . import fx, pricing, risk, upi
 from .events import broadcaster
 from .ledger import LedgerError, PAYOUT, REMITTER
 from .notifications import notifier
@@ -29,9 +29,18 @@ class Orchestrator:
         self.meta = {}       # remittance id -> off-chain PII + scenario
         self.history = {}    # sender hash -> [{ts, amountMinor}]
         self.seen_ben = set()
+        self.quotes = {}     # quoteId -> quote dict
         self._lock = threading.RLock()
+        self._remittance_locks = {}
+        self._remittance_locks_guard = threading.Lock()
         self.step_delay = float(os.environ.get("STEP_DELAY", "0.8")) if step_delay is None else step_delay
         self.expired_delay = float(os.environ.get("EXPIRED_DELAY", "3.0")) if expired_delay is None else expired_delay
+
+    def _get_remittance_lock(self, rid: str) -> threading.Lock:
+        with self._remittance_locks_guard:
+            if rid not in self._remittance_locks:
+                self._remittance_locks[rid] = threading.Lock()
+            return self._remittance_locks[rid]
 
     def _emit(self, r: dict, step: str):
         """Emit a real-time event and notification for a state change."""
@@ -45,94 +54,191 @@ class Orchestrator:
         broadcaster.emit_sync(event)
         notifier.notify(r)
 
+    def create_quote(self, corridor: str, amount_minor: int) -> dict:
+        if corridor not in fx.CORRIDORS:
+            raise ValueError(f"unknown corridor {corridor}")
+        s = fx.schedule(corridor)
+        decimals = s.get("decimals", 2)
+        q = pricing.compute_quote(s["ccy"], amount_minor, s["mid"], s["spread"], s["flat"], s["bps"], decimals=decimals)
+        qid = "Q-" + uuid.uuid4().hex[:10].upper()
+        now = time.time()
+        validity = 300
+        quote_data = {
+            "quoteId": qid,
+            "corridor": corridor,
+            "sendCurrency": s["ccy"],
+            "sendAmountMinor": amount_minor,
+            "midRateMicro": s["mid"],
+            "effectiveRateMicro": q["effectiveRateMicro"],
+            "spreadBps": s["spread"],
+            "feeFlatMinor": s["flat"],
+            "feeBps": s["bps"],
+            "feeTotalMinor": q["feeTotalMinor"],
+            "receivePaise": q["receivePaise"],
+            "costBps": q["costBps"],
+            "createdAt": now,
+            "expiresAt": now + validity,
+            "validitySecs": validity,
+            "decimals": decimals,
+        }
+        with self._lock:
+            self.quotes[qid] = quote_data
+        return quote_data
+
+    def preview(self, corridor: str, amount_minor: int) -> dict:
+        s = fx.schedule(corridor)
+        decimals = s.get("decimals", 2)
+        q = pricing.compute_quote(s["ccy"], amount_minor, s["mid"], s["spread"], s["flat"], s["bps"], decimals=decimals)
+        q["benchmarkCostBps"] = fx.BENCHMARK_COST_BPS
+        return q
+
     def create(self, p: dict) -> dict:
         scenario = p.get("scenario", "happy")
         if scenario not in SCENARIOS:
             raise ValueError(f"unknown scenario {scenario}")
         if p["corridor"] not in fx.CORRIDORS:
             raise ValueError("unknown corridor")
+
+        bound_quote = None
+        qid = p.get("quoteId")
+        if qid:
+            with self._lock:
+                bound_quote = self.quotes.get(qid)
+            if not bound_quote:
+                raise ValueError(f"quote {qid} not found or expired")
+            if time.time() > bound_quote["expiresAt"]:
+                raise ValueError(f"quote {qid} has expired")
+            # Overwrite amount/corridor from binding quote
+            p["amountMinor"] = bound_quote["sendAmountMinor"]
+            p["corridor"] = bound_quote["corridor"]
+
         rid = "R" + uuid.uuid4().hex[:10].upper()
         sender_h, ben_h = h(p["senderName"]), h(p["beneficiaryVpa"])
         with self._lock:
-            self.meta[rid] = {**p, "scenario": scenario, "senderHash": sender_h,
-                              "newBeneficiary": ben_h not in self.seen_ben}
+            self.meta[rid] = {
+                **p,
+                "scenario": scenario,
+                "senderHash": sender_h,
+                "newBeneficiary": ben_h not in self.seen_ben,
+                "boundQuote": bound_quote,
+            }
             self.seen_ben.add(ben_h)
+
         self.ledger.CreateRemittance(REMITTER, rid, p["corridor"], sender_h, ben_h, p["purpose"])
         r = self.ledger.GetRemittance(rid)
         logger.info("Remittance %s created for corridor %s (amount: %s minor)", rid, p["corridor"], p.get("amountMinor"))
         self._emit(r, "CREATE")
         return r
 
-    def preview(self, corridor: str, amount_minor: int) -> dict:
-        from .pricing import compute_quote
-        s = fx.schedule(corridor)
-        q = compute_quote(s["ccy"], amount_minor, s["mid"], s["spread"], s["flat"], s["bps"])
-        q["benchmarkCostBps"] = fx.BENCHMARK_COST_BPS
-        return q
-
     def step(self, rid: str) -> dict:
+        with self._get_remittance_lock(rid):
+            return self._step_unlocked(rid)
+
+    def _step_unlocked(self, rid: str) -> dict:
         with self._lock:
             m = dict(self.meta.get(rid, {}))
         r = self.ledger.GetRemittance(rid)
         st, sc = r["status"], m.get("scenario", "happy")
         L = self.ledger
+
+        if st in TERMINAL:
+            raise ValueError(f"cannot step remittance {rid} in terminal status {st}")
+
         if st == "CREATED":
-            s = fx.schedule(m["corridor"])
-            validity = 2 if sc == "quote_expired" else 300
-            L.LockQuote(REMITTER, rid, s["ccy"], m["amountMinor"], s["mid"], s["spread"], s["flat"], s["bps"], validity)
+            bound = m.get("boundQuote")
+            if bound:
+                remaining = max(1, int(bound["expiresAt"] - time.time()))
+                L.LockQuote(
+                    REMITTER, rid, bound["sendCurrency"], bound["sendAmountMinor"],
+                    bound["midRateMicro"], bound["spreadBps"], bound["feeFlatMinor"],
+                    bound["feeBps"], remaining, decimals=bound.get("decimals")
+                )
+            else:
+                s = fx.schedule(m["corridor"])
+                decimals = s.get("decimals", 2)
+                validity = 2 if sc == "quote_expired" else 300
+                L.LockQuote(REMITTER, rid, s["ccy"], m["amountMinor"], s["mid"], s["spread"], s["flat"], s["bps"], validity, decimals=decimals)
             self._emit(L.GetRemittance(rid), "LOCK_QUOTE")
+
         elif st == "QUOTED":
             with self._lock:
                 hist = list(self.history.get(m["senderHash"], []))
-            score, reasons = risk.score(m["amountMinor"], m["purpose"], hist, m.get("newBeneficiary", False),
-                                        force_high=(sc == "high_risk"))
+            score, reasons, breakdown = risk.score_and_explain(
+                m["amountMinor"], m["purpose"], hist, m.get("newBeneficiary", False),
+                force_high=(sc == "high_risk"), corridor=m.get("corridor")
+            )
+            with self._lock:
+                self.meta[rid]["risk_breakdown"] = breakdown
+                self.history.setdefault(m["senderHash"], []).append({"ts": time.time(), "amountMinor": m["amountMinor"]})
             sanctions = sc == "sanctions_hit"
             L.RecordScreening(REMITTER, rid, score, sanctions, ",".join(reasons))
-            with self._lock:
-                self.history.setdefault(m["senderHash"], []).append({"ts": time.time(), "amountMinor": m["amountMinor"]})
             if score >= 60:
                 logger.warning("Remittance %s compliance hold (score=%d, reasons=%s)", rid, score, reasons)
             self._emit(L.GetRemittance(rid), "SCREEN")
+
         elif st == "HELD":
             return {**r, "needsReview": True}
+
         elif st == "SCREENED":
-            registered = upi.resolve_vpa(m["beneficiaryVpa"], sc) or m["beneficiaryName"]
-            L.VerifyBeneficiary(PAYOUT, rid, upi.name_match(m["beneficiaryName"], registered))
+            registered = upi.resolve_vpa(m["beneficiaryVpa"], sc)
+            match_score = upi.name_match(m["beneficiaryName"], registered) if registered else 0
+            L.VerifyBeneficiary(PAYOUT, rid, match_score)
             self._emit(L.GetRemittance(rid), "VERIFY_BENEFICIARY")
+
         elif st == "VERIFIED":
             if sc == "quote_expired" and self.expired_delay > 0:
                 time.sleep(self.expired_delay)
             L.ConfirmFunding(REMITTER, rid, "FUND-" + rid)
             self._emit(L.GetRemittance(rid), "CONFIRM_FUNDING")
+
         elif st == "FUNDED":
             L.SubmitPayout(PAYOUT, rid, upi.submit(rid))
             self._emit(L.GetRemittance(rid), "SUBMIT_PAYOUT")
+
         elif st == "PAYOUT_SUBMITTED":
             outcome, ref = upi.poll(rid, sc)
             (L.SettlePayout if outcome == "SUCCESS" else L.FailPayout)(PAYOUT, rid, ref)
             self._emit(L.GetRemittance(rid), "SETTLE_PAYOUT" if outcome == "SUCCESS" else "FAIL_PAYOUT")
+
         elif st in ("FAILED", "EXPIRED", "BLOCKED", "BENEFICIARY_REJECTED"):
             L.Refund(REMITTER, rid, "RFND-" + rid)
             self._emit(L.GetRemittance(rid), "REFUND")
+
         curr = L.GetRemittance(rid)
         logger.info("Remittance %s status transitioned from %s to %s", rid, st, curr.get("status"))
         return curr
 
     def run(self, rid: str, max_steps: int = 12) -> dict:
-        for _ in range(max_steps):
-            r = self.ledger.GetRemittance(rid)
-            if r["status"] in TERMINAL or r["status"] == "HELD":
-                return r
-            self.step(rid)
-            if self.step_delay > 0:
-                time.sleep(self.step_delay)
-        return self.ledger.GetRemittance(rid)
+        with self._get_remittance_lock(rid):
+            for _ in range(max_steps):
+                r = self.ledger.GetRemittance(rid)
+                if r["status"] in TERMINAL or r["status"] == "HELD":
+                    return r
+                self._step_unlocked(rid)
+                if self.step_delay > 0:
+                    time.sleep(self.step_delay)
+            return self.ledger.GetRemittance(rid)
 
     def review(self, rid: str, approve: bool) -> dict:
-        self.ledger.ReviewHold(REMITTER, rid, approve, "" if approve else "Rejected by compliance officer")
+        with self._get_remittance_lock(rid):
+            self.ledger.ReviewHold(REMITTER, rid, approve, "" if approve else "Rejected by compliance officer")
+            r = self.ledger.GetRemittance(rid)
+            self._emit(r, "REVIEW_APPROVE" if approve else "REVIEW_REJECT")
+            return r
+
+    def get_risk_detail(self, rid: str) -> dict:
+        with self._lock:
+            meta = self.meta.get(rid, {})
+            if "risk_breakdown" in meta:
+                return meta["risk_breakdown"]
+        # Fallback if not yet screened
         r = self.ledger.GetRemittance(rid)
-        self._emit(r, "REVIEW_APPROVE" if approve else "REVIEW_REJECT")
-        return r
+        hist = self.history.get(meta.get("senderHash", ""), [])
+        return risk.explain(
+            meta.get("amountMinor", 0), r.get("purpose", ""), hist,
+            meta.get("newBeneficiary", False), force_high=(meta.get("scenario") == "high_risk"),
+            corridor=meta.get("corridor")
+        )
 
     def stats(self) -> dict:
         rs = self.ledger.ListRemittances()
@@ -141,16 +247,12 @@ class Orchestrator:
         times = [r["updatedAt"] - r["createdAt"] for r in settled]
         by_corridor = {}
         for r in rs:
-            c = r.get("corridor", "")
-            by_corridor[c] = by_corridor.get(c, 0) + 1
+            by_corridor[r["corridor"]] = by_corridor.get(r["corridor"], 0) + 1
         return {
-            "total": len(rs), "settled": len(settled),
-            "refunded": sum(r["status"] == "REFUNDED" for r in rs),
-            "held": sum(r["status"] == "HELD" for r in rs),
-            "blocked": sum(r["status"] == "BLOCKED" for r in rs),
-            "avgCostBps": round(sum(costs) / len(costs), 1) if costs else None,
-            "avgSettleSeconds": round(sum(times) / len(times), 1) if times else None,
-            "benchmarkCostBps": fx.BENCHMARK_COST_BPS,
+            "totalVolumePaise": sum(r["quote"]["receivePaise"] for r in settled if r.get("quote")),
+            "settledCount": len(settled),
+            "totalCount": len(rs),
+            "avgCostBps": int(sum(costs) / len(costs)) if costs else 0,
+            "avgLatencySec": round(sum(times) / len(times), 1) if times else 0,
             "byCorridor": by_corridor,
-            "corridorCount": len(fx.CORRIDORS),
         }

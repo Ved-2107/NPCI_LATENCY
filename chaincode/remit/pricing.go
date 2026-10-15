@@ -9,8 +9,9 @@ import "errors"
 //   amounts         -> minor units of the send currency (cents, fils, ...)
 //   rates           -> INR per 1 major unit of send currency, scaled by 1e6 ("micro")
 //   receive amount  -> paise (1/100 INR)
-// Because cents and paise are both 1/100 of a major unit,
-//   paise = cents * inrPerUnitMicro / 1e6.
+//   decimals        -> minor-unit decimal digits in send currency
+//
+// receivePaise = net * effRate * 100 / (10^decimals * 1e6) = (net * effRate) / 10^(decimals + 4)
 
 const (
 	bpsDenom     int64 = 10000
@@ -18,6 +19,27 @@ const (
 	maxSendMinor int64 = 1000000000 // 10,000,000.00 in major units
 	maxBps       int64 = 500
 )
+
+// CurrencyDecimals returns standard decimal places for supported currencies.
+func CurrencyDecimals(ccy string) int64 {
+	switch ccy {
+	case "JPY", "KRW":
+		return 0
+	case "BHD", "KWD":
+		return 3
+	default:
+		return 2
+	}
+}
+
+// pow10 computes 10^n for integer scaling without float conversions.
+func pow10(n int64) int64 {
+	res := int64(1)
+	for i := int64(0); i < n; i++ {
+		res *= 10
+	}
+	return res
+}
 
 // Quote is the fully itemised, immutable price of one remittance.
 type Quote struct {
@@ -32,11 +54,13 @@ type Quote struct {
 	ReceivePaise       int64  `json:"receivePaise"`
 	CostBps            int64  `json:"costBps"` // all-in cost vs mid-market, in basis points
 	ExpiresAtUnix      int64  `json:"expiresAtUnix"`
+	Decimals           int64  `json:"decimals"`
 }
 
 // ComputeQuote prices a remittance. expiresAt is supplied by the caller
 // (derived from the transaction timestamp, never time.Now()).
-func ComputeQuote(ccy string, sendMinor, midMicro, spreadBps, feeFlat, feeBps, expiresAt int64) (*Quote, error) {
+// decimals can optionally be supplied or inferred from ccy.
+func ComputeQuote(ccy string, sendMinor, midMicro, spreadBps, feeFlat, feeBps, expiresAt int64, decimals ...int64) (*Quote, error) {
 	switch {
 	case ccy == "":
 		return nil, errors.New("send currency required")
@@ -49,14 +73,21 @@ func ComputeQuote(ccy string, sendMinor, midMicro, spreadBps, feeFlat, feeBps, e
 	case feeFlat < 0:
 		return nil, errors.New("flat fee must be >= 0")
 	}
+	var dec int64
+	if len(decimals) > 0 && decimals[0] >= 0 {
+		dec = decimals[0]
+	} else {
+		dec = CurrencyDecimals(ccy)
+	}
 	fee := feeFlat + sendMinor*feeBps/bpsDenom
 	if fee >= sendMinor {
 		return nil, errors.New("fee exceeds amount")
 	}
 	eff := midMicro * (bpsDenom - spreadBps) / bpsDenom
+	denom := pow10(dec + 4)
 	net := sendMinor - fee
-	receive := net * eff / rateScale
-	midReceive := sendMinor * midMicro / rateScale
+	receive := net * eff / denom
+	midReceive := sendMinor * midMicro / denom
 	if midReceive <= 0 || receive <= 0 {
 		return nil, errors.New("amount too small")
 	}
@@ -65,5 +96,6 @@ func ComputeQuote(ccy string, sendMinor, midMicro, spreadBps, feeFlat, feeBps, e
 		SendCurrency: ccy, SendAmountMinor: sendMinor, MidRateMicro: midMicro,
 		SpreadBps: spreadBps, FeeFlatMinor: feeFlat, FeeBps: feeBps, FeeTotalMinor: fee,
 		EffectiveRateMicro: eff, ReceivePaise: receive, CostBps: cost, ExpiresAtUnix: expiresAt,
+		Decimals: dec,
 	}, nil
 }

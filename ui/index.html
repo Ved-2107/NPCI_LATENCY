@@ -131,6 +131,10 @@
             <div class="quote-preview" id="quote-preview">
               <div class="loader" id="quote-loader">Calculating live quote...</div>
               <div id="quote-data" style="display:none;">
+                <div class="quote-lock-pill" id="q-lock-pill" style="display:flex; justify-content:space-between; align-items:center; background:#EFF6FF; border:1px solid #BFDBFE; color:#1E40AF; padding:8px 12px; border-radius:4px; margin-bottom:12px; font-size:12px;">
+                  <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Guaranteed Binding Rate</span>
+                  <span id="q-lock-timer" class="mono font-semibold">Locked for 60s</span>
+                </div>
                 <table class="quote-table">
                   <tbody>
                     <tr>
@@ -199,11 +203,28 @@
 
           <!-- Step 4: Confirmation -->
           <div class="w-panel" id="panel-4">
-            <div class="success-message">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path></svg>
-              <h2>Transfer Initiated</h2>
-              <p>Your transfer has been successfully submitted to the ledger.</p>
-              <div class="kv-center"><span>Transfer Reference:</span><b id="c-ref" class="mono">--</b></div>
+            <div class="confirmation-card" id="c-card">
+              <div id="c-icon-wrapper" class="c-icon">
+                <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path></svg>
+              </div>
+              <h2 id="c-title">Transfer Initiated</h2>
+              <p id="c-desc">Your transfer has been successfully processed by RemitChain.</p>
+              
+              <div class="c-status-pill">
+                <span>Final Status:</span>
+                <span id="c-badge" class="badge b-success">SETTLED</span>
+              </div>
+
+              <div class="review-grid" style="margin-top: 24px; text-align: left;">
+                <div class="r-col">
+                  <div class="kv"><span>Reference:</span><b id="c-ref" class="mono">--</b></div>
+                  <div class="kv"><span>Corridor:</span><b id="c-corridor">--</b></div>
+                </div>
+                <div class="r-col">
+                  <div class="kv"><span>Recipient Gets:</span><b id="c-amount">--</b></div>
+                  <div class="kv"><span>Payout Ref:</span><b id="c-payout-ref" class="mono">--</b></div>
+                </div>
+              </div>
             </div>
             <div class="wizard-actions" style="justify-content: center; margin-top: 32px;">
               <button class="btn btn-primary" onclick="viewTransferDetail()">Track this transfer</button>

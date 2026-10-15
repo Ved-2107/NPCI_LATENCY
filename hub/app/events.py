@@ -24,11 +24,20 @@ class EventBroadcaster:
         self._event_log: list = []
         self._max_log = 500
         self._lock = threading.Lock()
+        self.loop = None
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop):
+        self.loop = loop
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
         with self._lock:
             self._connections.add(ws)
+            if not self.loop:
+                try:
+                    self.loop = asyncio.get_running_loop()
+                except Exception:
+                    pass
             count = len(self._connections)
         logger.info("WebSocket client connected. Active connections: %d", count)
 
@@ -60,18 +69,22 @@ class EventBroadcaster:
 
     def emit_sync(self, event: dict):
         """Non-async wrapper for use in synchronous ledger code.
-        Schedules the broadcast on the running event loop if available."""
+        Schedules the broadcast on the main event loop across threads."""
         event["timestamp"] = time.time()
         event["iso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         with self._lock:
             self._event_log.append(event)
             if len(self._event_log) > self._max_log:
                 self._event_log = self._event_log[-self._max_log:]
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._broadcast_existing(event))
-        except RuntimeError:
-            pass  # no event loop running (e.g., in tests)
+
+        if self.loop and self.loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._broadcast_existing(event), self.loop)
+        else:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._broadcast_existing(event))
+            except RuntimeError:
+                pass  # no event loop running (e.g. in standalone tests without loop)
 
     async def _broadcast_existing(self, event: dict):
         message = json.dumps(event)

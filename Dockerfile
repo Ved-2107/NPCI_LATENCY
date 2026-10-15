@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r hub/requirements.txt
 
 # Copy application code and assets
 COPY hub/app hub/app
-COPY hub/tests hub/tests
 COPY ui ui
 COPY testvectors testvectors
 

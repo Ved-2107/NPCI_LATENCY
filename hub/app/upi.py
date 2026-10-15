@@ -11,13 +11,16 @@ def name_match(declared: str, registered: str) -> int:
     return int(round(difflib.SequenceMatcher(None, a, b).ratio() * 100))
 
 
-def resolve_vpa(vpa: str, scenario: str) -> str | None:
-    """Return the registered account holder name for a VPA (simulated)."""
-    if not VPA_RE.match(vpa):
+def resolve_vpa(vpa: str, scenario: str = "happy") -> str | None:
+    """Return the registered account holder name for a VPA (simulated).
+    Returns None if format is invalid or cannot be resolved."""
+    if not vpa or not VPA_RE.match(vpa):
         return None
     if scenario == "bad_beneficiary":
         return "Completely Different Person"
-    return None  # caller falls back to declared name (match = 100)
+    # In simulated happy path, extract name from VPA handle or provide realistic match
+    handle = vpa.split("@")[0].replace(".", " ").replace("_", " ").title()
+    return handle if len(handle) >= 2 else "Verified Beneficiary"
 
 
 def submit(remittance_id: str) -> str:

@@ -79,17 +79,39 @@ $('amount').addEventListener('input', debounce(() => {
   }
 }, 500));
 
+// Toast Notification System
+function showToast(message, type = "info", duration = 4000) {
+  let container = $('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerText = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
 // Wizard Logic
 function wizardNext(step) {
   if (step === 2) {
     if (!$('corridor').checkValidity() || !$('sender').checkValidity() || !$('benName').checkValidity() || !$('vpa').checkValidity()) {
-      alert("Please fill all mandatory fields.");
+      showToast("Please fill all mandatory fields.", "warn");
       return;
     }
     fetchQuote();
   }
   if (step === 3) {
-    if (!$('amount').checkValidity()) { alert("Please enter a valid amount."); return; }
+    if (!$('amount').checkValidity()) { 
+      showToast("Please enter a valid amount.", "warn"); 
+      return; 
+    }
     populateReview();
   }
   
@@ -105,20 +127,30 @@ function resetWizard() {
   $('confirm-check').checked = false;
   $('btn-submit').disabled = true;
   $('c-ref').innerText = '--';
+  $('c-amount').innerText = '--';
+  $('c-payout-ref').innerText = '--';
 }
 
-// Quote Fetching
+// Quote Fetching with Binding Quote & Countdown
+let quoteCountdownInterval = null;
+
 async function fetchQuote() {
   $('quote-data').style.display = 'none';
   $('quote-loader').style.display = 'block';
   $('btn-to-review').disabled = true;
+  if (quoteCountdownInterval) clearInterval(quoteCountdownInterval);
   
   try {
     const ccyNode = $('corridor').options[$('corridor').selectedIndex];
     const dec = parseInt(ccyNode.dataset.dec);
     const amtMinor = parseFloat($('amount').value) * Math.pow(10, dec);
     
-    currentQuote = await api(`/api/quote?corridor=${$('corridor').value}&amountMinor=${Math.round(amtMinor)}`);
+    // Obtain binding quote
+    currentQuote = await api("/api/quotes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ corridor: $('corridor').value, amountMinor: Math.round(amtMinor) })
+    });
     
     $('q-send').innerText = `${formatAmt(currentQuote.sendAmountMinor, dec)} ${currentQuote.sendCurrency}`;
     $('q-fee').innerText = `${formatAmt(currentQuote.feeTotalMinor, dec)} ${currentQuote.sendCurrency}`;
@@ -126,11 +158,29 @@ async function fetchQuote() {
     $('q-rate').innerText = `1 ${currentQuote.sendCurrency} = ${(currentQuote.effectiveRateMicro / 1e6).toFixed(4)} INR`;
     $('q-recv').innerText = formatInr(currentQuote.receivePaise);
     
+    // Countdown
+    let remaining = Math.max(0, Math.floor(currentQuote.expiresAt - (Date.now() / 1000)));
+    const timerEl = $('q-lock-timer');
+    if (timerEl) {
+      timerEl.innerText = `Locked for ${remaining}s`;
+      quoteCountdownInterval = setInterval(() => {
+        remaining--;
+        if (remaining > 0) {
+          timerEl.innerText = `Locked for ${remaining}s`;
+        } else {
+          timerEl.innerText = "Quote expired (refreshing...)";
+          clearInterval(quoteCountdownInterval);
+          fetchQuote();
+        }
+      }, 1000);
+    }
+    
     $('quote-loader').style.display = 'none';
     $('quote-data').style.display = 'block';
     $('btn-to-review').disabled = false;
   } catch (e) {
     $('quote-loader').innerText = `Error: ${e.message}`;
+    showToast(`Error fetching quote: ${e.message}`, "error");
   }
 }
 
@@ -148,6 +198,48 @@ $('confirm-check').addEventListener('change', (e) => {
   $('btn-submit').disabled = !e.target.checked;
 });
 
+function updateConfirmationView(result) {
+  const status = result.status;
+  const iconWrapper = $('c-icon-wrapper');
+  const title = $('c-title');
+  const desc = $('c-desc');
+  const badge = $('c-badge');
+  
+  badge.className = `badge ${getStatusClass(status)}`;
+  badge.innerText = status;
+  $('c-ref').innerText = result.id;
+  $('c-corridor').innerText = result.corridor || $('corridor').value;
+  $('c-amount').innerText = result.quote ? formatInr(result.quote.receivePaise) : '--';
+  $('c-payout-ref').innerText = result.payoutReference || 'N/A';
+  
+  if (status === 'SETTLED') {
+    iconWrapper.innerHTML = `<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path></svg>`;
+    title.innerText = 'Transfer Settled Successfully';
+    desc.innerText = 'Funds have been credited instantly to the beneficiary UPI account.';
+    showToast(`Transfer ${result.id} settled successfully!`, 'success');
+  } else if (status === 'HELD') {
+    iconWrapper.innerHTML = `<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+    title.innerText = 'Transfer Flagged for Compliance Review';
+    desc.innerText = 'Compliance hold triggered (risk threshold or corridor daily cap exceeded). Transfer is in HELD state pending Maker-Checker review.';
+    showToast(`Transfer ${result.id} is HELD for review`, 'warn');
+  } else if (status === 'BLOCKED') {
+    iconWrapper.innerHTML = `<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#B91C1C" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+    title.innerText = 'Transfer Blocked by Policy';
+    desc.innerText = 'Transaction was blocked due to sanctions policy or terminal compliance rules.';
+    showToast(`Transfer ${result.id} was BLOCKED`, 'error');
+  } else if (status === 'REFUNDED') {
+    iconWrapper.innerHTML = `<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`;
+    title.innerText = 'Transfer Refunded';
+    desc.innerText = 'Beneficiary rejected or payout rail unavailable. Funds reversed back to remitter.';
+    showToast(`Transfer ${result.id} refunded to remitter`, 'warn');
+  } else {
+    iconWrapper.innerHTML = `<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>`;
+    title.innerText = `Transfer Status: ${status}`;
+    desc.innerText = 'Transfer has progressed through the RemitChain state machine.';
+    showToast(`Transfer status: ${status}`, 'info');
+  }
+}
+
 // Submit Transfer
 $('btn-submit').addEventListener('click', async () => {
   $('btn-submit').disabled = true;
@@ -163,19 +255,25 @@ $('btn-submit').addEventListener('click', async () => {
       beneficiaryVpa: $('vpa').value,
       purpose: $('purpose').value,
       amountMinor: Math.round(parseFloat($('amount').value) * Math.pow(10, dec)),
-      scenario: $('scenario').value
+      scenario: $('scenario').value,
+      quoteId: currentQuote ? currentQuote.quoteId : undefined
     };
     
-    const res = await api("/api/remittances", { method: "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    const res = await api("/api/remittances", { 
+      method: "POST", 
+      headers: { "Content-Type": "application/json" }, 
+      body: JSON.stringify(payload) 
+    });
     const rid = res.id;
     $('c-ref').innerText = rid;
     
     // Auto-run steps
-    await api(`/api/remittances/${rid}/run`, { method: "POST" });
+    const runRes = await api(`/api/remittances/${rid}/run`, { method: "POST" });
     
+    updateConfirmationView(runRes);
     wizardNext(4);
   } catch (e) {
-    alert(`Transfer failed: ${e.message}`);
+    showToast(`Transfer failed: ${e.message}`, "error");
   } finally {
     $('btn-submit').innerText = 'Submit Transfer';
   }
@@ -332,7 +430,7 @@ async function openDetail(rid) {
     `).join("");
     
   } catch (e) {
-    alert("Error loading details");
+    showToast("Error loading details: " + e.message, "error");
     closeDetail();
   }
 }
@@ -371,9 +469,10 @@ async function reviewHold(rid, approve) {
   try {
     await api(`/api/remittances/${rid}/review`, { method: "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({approve}) });
     if (approve) await api(`/api/remittances/${rid}/run`, { method: "POST" });
+    showToast(`Transfer ${rid} ${approve ? 'approved and resumed' : 'rejected'}`, approve ? 'success' : 'warn');
     loadComplianceDesk();
   } catch(e) {
-    alert(e.message);
+    showToast(e.message, "error");
   }
 }
 

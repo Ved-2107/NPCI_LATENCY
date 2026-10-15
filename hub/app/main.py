@@ -1,9 +1,10 @@
+import asyncio
 import json
 import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -16,6 +17,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("remitchain.api")
 
+from contextlib import asynccontextmanager
+
 from . import fx
 from .audit import filter_trail, to_csv, compliance_summary
 from .calculator import compare
@@ -25,11 +28,27 @@ from .notifications import notifier
 from .orchestrator import Orchestrator
 from .risk import explain as risk_explain
 
-app = FastAPI(title="RemitChain Hub", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        loop = asyncio.get_running_loop()
+        broadcaster.set_loop(loop)
+        logger.info("Main asyncio loop captured for EventBroadcaster")
+    except Exception as e:
+        logger.warning("Could not set broadcaster loop on startup: %s", e)
+    yield
+
+
+app = FastAPI(title="RemitChain Hub", version="0.3.0", lifespan=lifespan)
+
+# Configurable CORS
+cors_origins_env = os.environ.get("CORS_ORIGINS", "*")
+cors_origins = [o.strip() for o in cors_origins_env.split(",")] if cors_origins_env != "*" else ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,27 +57,47 @@ app.add_middleware(
 ledger = make_ledger()
 orch = Orchestrator(ledger)
 UI_DIR = Path(__file__).resolve().parents[2] / "ui"
+idempotency_store: dict[str, dict] = {}
+
+
+class QuoteRequest(BaseModel):
+    corridor: str
+    amountMinor: int = Field(gt=0, le=1_000_000_000)
 
 
 class NewRemittance(BaseModel):
     corridor: str
     senderName: str = Field(min_length=2)
     beneficiaryName: str = Field(min_length=2)
-    beneficiaryVpa: str = Field(min_length=3)
+    beneficiaryVpa: str = Field(pattern=r"^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$")
     purpose: str = Field(min_length=2)
     amountMinor: int = Field(gt=0, le=1_000_000_000)
     scenario: str = "happy"
+    quoteId: str | None = None
 
 
 class Review(BaseModel):
     approve: bool
 
 
-def guard(fn, *a):
+def guard(fn, *a, **kw):
     try:
-        return fn(*a)
+        return fn(*a, **kw)
     except (LedgerError, ValueError, KeyError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        msg_lower = msg.lower()
+        if "not found" in msg_lower:
+            raise HTTPException(status_code=404, detail={"code": "ERR_NOT_FOUND", "message": msg})
+        if (
+            "expected one of" in msg_lower or
+            "already" in msg_lower or
+            "not permitted" in msg_lower or
+            "cannot step" in msg_lower or
+            "terminal status" in msg_lower or
+            "conflict" in msg_lower
+        ):
+            raise HTTPException(status_code=409, detail={"code": "ERR_STATE_CONFLICT", "message": msg})
+        raise HTTPException(status_code=400, detail={"code": "ERR_BAD_REQUEST", "message": msg})
 
 
 # ── Health & Metadata ────────────────────────────────────────────
@@ -75,13 +114,19 @@ def corridors():
 
 # ── Quote & Pricing ─────────────────────────────────────────────
 
+@app.post("/api/quotes")
+def create_binding_quote(body: QuoteRequest):
+    """Generate a binding quote with a live lock window (e.g. 5 minutes)."""
+    return guard(orch.create_quote, body.corridor, body.amountMinor)
+
+
 @app.get("/api/quote")
 def quote(
     corridor: str = Query(..., description="Corridor code e.g. US-IN"),
     amountMinor: int = Query(..., gt=0, le=1_000_000_000, description="Amount in minor currency units"),
 ):
     if corridor not in fx.CORRIDORS:
-        raise HTTPException(status_code=400, detail=f"Unsupported corridor: {corridor}")
+        raise HTTPException(status_code=400, detail={"code": "ERR_UNSUPPORTED_CORRIDOR", "message": f"Unsupported corridor: {corridor}"})
     return guard(orch.preview, corridor, amountMinor)
 
 
@@ -91,15 +136,21 @@ def cost_compare(
     amountMinor: int = Query(..., gt=0, le=1_000_000_000, description="Amount in minor currency units"),
 ):
     if corridor not in fx.CORRIDORS:
-        raise HTTPException(status_code=400, detail=f"Unsupported corridor: {corridor}")
+        raise HTTPException(status_code=400, detail={"code": "ERR_UNSUPPORTED_CORRIDOR", "message": f"Unsupported corridor: {corridor}"})
     return guard(compare, corridor, amountMinor)
 
 
 # ── Remittance CRUD ──────────────────────────────────────────────
 
 @app.post("/api/remittances")
-def create(body: NewRemittance):
-    return guard(orch.create, body.model_dump())
+def create(body: NewRemittance, idempotency_key: str | None = Header(None, alias="Idempotency-Key")):
+    if idempotency_key and idempotency_key in idempotency_store:
+        logger.info("Idempotent hit for key %s", idempotency_key)
+        return idempotency_store[idempotency_key]
+    res = guard(orch.create, body.model_dump())
+    if idempotency_key:
+        idempotency_store[idempotency_key] = res
+    return res
 
 
 @app.get("/api/remittances")
@@ -140,17 +191,8 @@ async def review(rid: str, body: Review):
 
 @app.get("/api/remittances/{rid}/risk")
 def risk_detail(rid: str):
-    """Return SHAP-style risk explainability for a remittance."""
-    r = guard(ledger.GetRemittance, rid)
-    meta = orch.meta.get(rid, {})
-    hist = orch.history.get(meta.get("senderHash", ""), [])
-    return risk_explain(
-        meta.get("amountMinor", 0),
-        r.get("purpose", ""),
-        hist,
-        meta.get("newBeneficiary", False),
-        force_high=(meta.get("scenario") == "high_risk"),
-    )
+    """Return persisted explainability breakdown for a remittance."""
+    return guard(orch.get_risk_detail, rid)
 
 
 # ── Stats ────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -23,7 +24,8 @@ def client():
     import app.main as m
     m.ledger = MemoryLedger()
     m.orch.__init__(m.ledger, step_delay=0, expired_delay=0)
-    return TestClient(m.app)
+    with TestClient(m.app) as c:
+        yield c
 
 
 def test_audit_trail_filtering_and_export(client):
@@ -97,16 +99,16 @@ def test_input_validation_and_error_handling(client):
     # Invalid corridor on /api/quote
     resp = client.get("/api/quote?corridor=XX-YY&amountMinor=1000")
     assert resp.status_code == 400
-    assert "Unsupported corridor" in resp.json()["detail"]
+    assert "Unsupported corridor" in str(resp.json()["detail"])
 
     # Negative amountMinor (violates gt=0)
     resp = client.get("/api/quote?corridor=US-IN&amountMinor=-500")
     assert resp.status_code == 422
 
-    # Non-existent remittance lookup
+    # Non-existent remittance lookup returns 404
     resp = client.get("/api/remittances/NONEXISTENT123")
-    assert resp.status_code == 400
-    assert "not found" in resp.json()["detail"]
+    assert resp.status_code == 404
+    assert "not found" in str(resp.json()["detail"]).lower()
 
 
 def test_remittance_pagination(client):
@@ -133,3 +135,73 @@ def test_public_track_endpoint(client):
     assert track_data["id"] == rid
     assert track_data["status"] == "SETTLED"
     assert "steps" in track_data
+
+
+def test_upi_vpa_format_validation(client):
+    # Format without '@' must fail with 422
+    resp = client.post("/api/remittances", json=create_body(beneficiaryVpa="invalid_vpa_no_at"))
+    assert resp.status_code == 422
+
+
+def test_binding_quotes_flow(client):
+    # Request a binding quote
+    q_resp = client.post("/api/quotes", json={"corridor": "US-IN", "amountMinor": 100000})
+    assert q_resp.status_code == 200
+    q_data = q_resp.json()
+    assert "quoteId" in q_data
+    assert q_data["receivePaise"] > 0
+    qid = q_data["quoteId"]
+
+    # Create remittance with binding quote
+    r_resp = client.post("/api/remittances", json=create_body(quoteId=qid))
+    assert r_resp.status_code == 200
+    r_data = r_resp.json()
+
+    # Run the remittance and verify settled
+    settled = client.post(f"/api/remittances/{r_data['id']}/run").json()
+    assert settled["status"] == "SETTLED"
+    assert settled["quote"]["receivePaise"] == q_data["receivePaise"]
+
+
+def test_idempotency_key(client):
+    headers = {"Idempotency-Key": "test-key-uuid-1234"}
+    b = create_body()
+    r1 = client.post("/api/remittances", json=b, headers=headers).json()
+    r2 = client.post("/api/remittances", json=b, headers=headers).json()
+    assert r1["id"] == r2["id"]
+
+
+def test_state_conflict_error_409(client):
+    r = client.post("/api/remittances", json=create_body()).json()
+    rid = r["id"]
+    # Settle it
+    client.post(f"/api/remittances/{rid}/run")
+    # Stepping a settled remittance must raise 409 conflict
+    step_resp = client.post(f"/api/remittances/{rid}/step")
+    assert step_resp.status_code == 409
+    assert step_resp.json()["detail"]["code"] == "ERR_STATE_CONFLICT"
+
+
+def test_websocket_live_event_delivery(client):
+    import app.main as m
+    with client.websocket_connect("/ws/events") as ws:
+        # Drain any backlog events sent on connection
+        backlog_count = len(m.broadcaster.recent_events[-20:])
+        for _ in range(backlog_count):
+            ws.receive_json()
+
+        # Create and run transfer
+        r = client.post("/api/remittances", json=create_body()).json()
+        rid = r["id"]
+        client.post(f"/api/remittances/{rid}/run")
+
+        received_events = []
+        for _ in range(7):
+            data = ws.receive_json()
+            if data.get("remittanceId") == rid:
+                received_events.append(data)
+
+        # Proves events were actively delivered via WebSocket during /run
+        assert len(received_events) > 0
+        assert any(e.get("step") in ("CREATE", "LOCK_QUOTE", "SCREEN", "VERIFY_BENEFICIARY", "SETTLE_PAYOUT") for e in received_events)
+

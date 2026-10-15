@@ -7,7 +7,8 @@
       "midMicro": 88000000,
       "spreadBps": 30,
       "feeFlat": 100,
-      "feeBps": 10
+      "feeBps": 10,
+      "decimals": 2
     },
     "expect": {
       "receivePaise": 8756052,
@@ -24,7 +25,8 @@
       "midMicro": 23950000,
       "spreadBps": 25,
       "feeFlat": 100,
-      "feeBps": 10
+      "feeBps": 10,
+      "decimals": 2
     },
     "expect": {
       "receivePaise": 5964169,
@@ -41,7 +43,8 @@
       "midMicro": 118500000,
       "spreadBps": 35,
       "feeFlat": 100,
-      "feeBps": 10
+      "feeBps": 10,
+      "decimals": 2
     },
     "expect": {
       "receivePaise": 578027,
@@ -58,7 +61,8 @@
       "midMicro": 68500000,
       "spreadBps": 30,
       "feeFlat": 100,
-      "feeBps": 10
+      "feeBps": 10,
+      "decimals": 2
     },
     "expect": {
       "receivePaise": 6140351665,
@@ -75,13 +79,86 @@
       "midMicro": 88000000,
       "spreadBps": 0,
       "feeFlat": 0,
-      "feeBps": 0
+      "feeBps": 0,
+      "decimals": 2
     },
     "expect": {
       "receivePaise": 8800000,
       "feeTotalMinor": 0,
       "costBps": 0,
       "effectiveRateMicro": 88000000
+    }
+  },
+  {
+    "name": "jpy_100k",
+    "ccy": "JPY",
+    "input": {
+      "sendMinor": 100000,
+      "midMicro": 587000,
+      "spreadBps": 35,
+      "feeFlat": 500,
+      "feeBps": 15,
+      "decimals": 0
+    },
+    "expect": {
+      "receivePaise": 5811428,
+      "feeTotalMinor": 650,
+      "costBps": 99,
+      "effectiveRateMicro": 584945
+    }
+  },
+  {
+    "name": "krw_1m",
+    "ccy": "KRW",
+    "input": {
+      "sendMinor": 1000000,
+      "midMicro": 63500,
+      "spreadBps": 40,
+      "feeFlat": 50000,
+      "feeBps": 15,
+      "decimals": 0
+    },
+    "expect": {
+      "receivePaise": 5998883,
+      "feeTotalMinor": 51500,
+      "costBps": 552,
+      "effectiveRateMicro": 63246
+    }
+  },
+  {
+    "name": "bhd_1000",
+    "ccy": "BHD",
+    "input": {
+      "sendMinor": 1000000,
+      "midMicro": 233100000,
+      "spreadBps": 20,
+      "feeFlat": 50,
+      "feeBps": 8,
+      "decimals": 3
+    },
+    "expect": {
+      "receivePaise": 23243606,
+      "feeTotalMinor": 850,
+      "costBps": 28,
+      "effectiveRateMicro": 232633800
+    }
+  },
+  {
+    "name": "kwd_1000",
+    "ccy": "KWD",
+    "input": {
+      "sendMinor": 1000000,
+      "midMicro": 286500000,
+      "spreadBps": 22,
+      "feeFlat": 30,
+      "feeBps": 8,
+      "decimals": 3
+    },
+    "expect": {
+      "receivePaise": 28563242,
+      "feeTotalMinor": 830,
+      "costBps": 30,
+      "effectiveRateMicro": 285869700
     }
   }
 ]

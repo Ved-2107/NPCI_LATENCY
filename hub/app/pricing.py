@@ -6,9 +6,20 @@ MAX_SEND_MINOR = 1_000_000_000
 MAX_BPS = 500
 
 
-def compute_quote(ccy, send_minor, mid_micro, spread_bps, fee_flat, fee_bps, expires_at=0):
+def currency_decimals(ccy: str) -> int:
+    """Return standard minor-unit decimal digits for a currency."""
+    if ccy in ("JPY", "KRW"):
+        return 0
+    if ccy in ("BHD", "KWD"):
+        return 3
+    return 2
+
+
+def compute_quote(ccy, send_minor, mid_micro, spread_bps, fee_flat, fee_bps, expires_at=0, decimals=None):
     if not ccy:
         raise ValueError("send currency required")
+    if decimals is None:
+        decimals = currency_decimals(ccy)
     if send_minor <= 0 or send_minor > MAX_SEND_MINOR:
         raise ValueError("send amount out of range")
     if mid_micro <= 0:
@@ -21,8 +32,9 @@ def compute_quote(ccy, send_minor, mid_micro, spread_bps, fee_flat, fee_bps, exp
     if fee >= send_minor:
         raise ValueError("fee exceeds amount")
     eff = mid_micro * (BPS - spread_bps) // BPS
-    receive = (send_minor - fee) * eff // SCALE
-    mid_receive = send_minor * mid_micro // SCALE
+    denom = 10 ** (decimals + 4)
+    receive = (send_minor - fee) * eff // denom
+    mid_receive = send_minor * mid_micro // denom
     if mid_receive <= 0 or receive <= 0:
         raise ValueError("amount too small")
     cost = (mid_receive - receive) * BPS // mid_receive
@@ -30,5 +42,5 @@ def compute_quote(ccy, send_minor, mid_micro, spread_bps, fee_flat, fee_bps, exp
         "sendCurrency": ccy, "sendAmountMinor": send_minor, "midRateMicro": mid_micro,
         "spreadBps": spread_bps, "feeFlatMinor": fee_flat, "feeBps": fee_bps,
         "feeTotalMinor": fee, "effectiveRateMicro": eff, "receivePaise": receive,
-        "costBps": cost, "expiresAtUnix": expires_at,
+        "costBps": cost, "expiresAtUnix": expires_at, "decimals": decimals,
     }

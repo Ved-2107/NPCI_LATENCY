@@ -22,10 +22,12 @@ PROVIDERS = {
 def compare(corridor: str, amount_minor: int) -> dict:
     """Compare RemitChain cost against all providers for a given corridor and amount."""
     s = fx.schedule(corridor)
-    q = compute_quote(s["ccy"], amount_minor, s["mid"], s["spread"], s["flat"], s["bps"])
+    decimals = s.get("decimals", 2)
+    q = compute_quote(s["ccy"], amount_minor, s["mid"], s["spread"], s["flat"], s["bps"], decimals=decimals)
     rc_cost_bps = q["costBps"]
     rc_receive = q["receivePaise"]
-    mid_receive = amount_minor * s["mid"] // 1_000_000  # what you'd get at mid-market
+    denom = 10 ** (decimals + 4)
+    mid_receive = amount_minor * s["mid"] // denom  # what you'd get at mid-market
 
     comparisons = []
     for pid, p in PROVIDERS.items():

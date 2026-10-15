@@ -24,8 +24,14 @@ func TestQuoteVectors(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, v := range vs {
+		var dec int64
+		if d, ok := v.Input["decimals"]; ok {
+			dec = d
+		} else {
+			dec = CurrencyDecimals(v.Ccy)
+		}
 		q, err := ComputeQuote(v.Ccy, v.Input["sendMinor"], v.Input["midMicro"], v.Input["spreadBps"],
-			v.Input["feeFlat"], v.Input["feeBps"], 0)
+			v.Input["feeFlat"], v.Input["feeBps"], 0, dec)
 		if err != nil {
 			t.Fatalf("%s: %v", v.Name, err)
 		}

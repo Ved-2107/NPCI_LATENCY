@@ -20,7 +20,7 @@ def body(**kw):
 def client():
     import app.main as m
     m.ledger = MemoryLedger()
-    m.orch.__init__(m.ledger)
+    m.orch.__init__(m.ledger, step_delay=0)
     return TestClient(m.app)
 
 
@@ -32,7 +32,7 @@ def run(client, **kw):
 def test_shared_quote_vectors():
     for v in json.loads((ROOT / "testvectors/quote_vectors.json").read_text()):
         i = v["input"]
-        q = compute_quote(v["ccy"], i["sendMinor"], i["midMicro"], i["spreadBps"], i["feeFlat"], i["feeBps"])
+        q = compute_quote(v["ccy"], i["sendMinor"], i["midMicro"], i["spreadBps"], i["feeFlat"], i["feeBps"], decimals=i.get("decimals"))
         for k, want in v["expect"].items():
             assert q[k] == want, (v["name"], k)
 

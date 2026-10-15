@@ -37,7 +37,10 @@ def mid_rate_micro(corridor: str) -> int:
 
 def schedule(corridor: str) -> dict:
     c = CORRIDORS[corridor]
-    return {"ccy": c["ccy"], "mid": mid_rate_micro(corridor), "spread": c["spread"], "flat": c["flat"], "bps": c["bps"]}
+    return {
+        "ccy": c["ccy"], "mid": mid_rate_micro(corridor), "spread": c["spread"],
+        "flat": c["flat"], "bps": c["bps"], "decimals": c.get("decimals", 2),
+    }
 
 
 def corridor_info(corridor: str) -> dict:
