@@ -57,8 +57,9 @@ class MemoryLedger:
 
     def _save(self, org, r, step, status):
         now = self._now()
+        now_ms = round(time.time() * 1000, 2)
         r["status"], r["updatedAt"] = status, now
-        r["trail"].append({"step": step, "status": status, "org": org, "txId": uuid.uuid4().hex, "ts": now})
+        r["trail"].append({"step": step, "status": status, "org": org, "txId": uuid.uuid4().hex, "ts": now, "tsMs": now_ms})
         with self._lock:
             self.state[r["id"]] = r
         logger.info("Ledger remittance %s status updated: %s (step: %s, org: %s)", r["id"], status, step, org)

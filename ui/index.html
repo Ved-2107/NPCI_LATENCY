@@ -36,6 +36,8 @@
       <nav class="primary-nav" aria-label="Main Navigation">
         <button class="nav-link active" data-tab="send">Send money</button>
         <button class="nav-link" data-tab="track">Track transfer</button>
+        <button class="nav-link" data-tab="latency">Latency lab</button>
+        <button class="nav-link" data-tab="compare">Cost comparison</button>
         <button class="nav-link" data-tab="compliance">Compliance desk</button>
         <button class="nav-link" data-tab="insights">Network insights</button>
       </nav>
@@ -380,6 +382,217 @@
         </div>
       </div>
     </section>
+
+    <!-- TAB: LATENCY LAB -->
+    <section id="tab-latency" class="tab-pane">
+      <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+        <div>
+          <h1>Latency Lab & Real-Time Telemetry</h1>
+          <p class="subtitle">Live sub-second performance metrics, cross-border swim-lane and SWIFT comparison.</p>
+        </div>
+        <div class="speedup-badge" id="speedup-badge">
+          <span class="speedup-val" id="speedup-val">--x</span>
+          <span class="speedup-sub">Faster than SWIFT GPI</span>
+        </div>
+      </div>
+
+      <!-- Live Swim-Lane -->
+      <div class="panel-section" style="margin-top:20px;">
+        <h3>Cross-Border Swim-Lane: Citi &rarr; NPCI Relay</h3>
+        <p class="helper-text">Real-time attestation and state transitions across remitting bank and domestic payout rail.</p>
+        <div class="swimlane-wrapper">
+          <div class="swimlane-org" id="lane-citi">
+            <div class="swimlane-header">
+              <span class="org-tag tag-citi">Org1MSP</span>
+              <h4>Citi (Remitting Bank)</h4>
+            </div>
+            <div class="swimlane-steps">
+              <div class="lane-node" id="node-CREATE" data-step="CREATE">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>1. Initiate</b><span>Payload Signed</span></div>
+              </div>
+              <div class="lane-node" id="node-LOCK_QUOTE" data-step="LOCK_QUOTE">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>2. Lock Quote</b><span>Rate Guaranteed</span></div>
+              </div>
+              <div class="lane-node" id="node-SCREEN" data-step="SCREEN">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>3. Screening</b><span>AI AML/Sanctions</span></div>
+              </div>
+              <div class="lane-node" id="node-CONFIRM_FUNDING" data-step="CONFIRM_FUNDING">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>5. Fund Lock</b><span>Ledger Escrow</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="swimlane-bridge">
+            <div class="bridge-line"></div>
+            <div class="bridge-packet" id="bridge-packet">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+            </div>
+            <span class="bridge-label">Drunix P2P Fabric Bridge</span>
+          </div>
+
+          <div class="swimlane-org" id="lane-npci">
+            <div class="swimlane-header">
+              <span class="org-tag tag-npci">Org2MSP</span>
+              <h4>NPCI (Payout Rail)</h4>
+            </div>
+            <div class="swimlane-steps">
+              <div class="lane-node" id="node-VERIFY_BENEFICIARY" data-step="VERIFY_BENEFICIARY">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>4. VPA Verify</b><span>UPILink Lookup</span></div>
+              </div>
+              <div class="lane-node" id="node-SUBMIT_PAYOUT" data-step="SUBMIT_PAYOUT">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>6. UPILink Push</b><span>Switch Inbound</span></div>
+              </div>
+              <div class="lane-node" id="node-SETTLE_PAYOUT" data-step="SETTLE_PAYOUT">
+                <div class="node-dot"></div>
+                <div class="node-info"><b>7. Settled</b><span>Immediate Credit</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Head to Head Race -->
+      <div class="panel-section" style="margin-top:24px;">
+        <h3>Head-to-Head Race: RemitChain vs Legacy Rails</h3>
+        <div class="race-wrapper">
+          <div class="race-item">
+            <div class="race-meta">
+              <b>RemitChain (Direct Blockchain & UPI)</b>
+              <span id="race-rc-time" class="num mono text-primary">-- ms</span>
+            </div>
+            <div class="race-track">
+              <div class="race-bar rc-bar" id="race-rc-bar" style="width: 100%;"></div>
+            </div>
+            <div class="race-sub">Instant atomic settlement &bull; End-to-end cryptographic proof</div>
+          </div>
+
+          <div class="race-item" style="margin-top:16px;">
+            <div class="race-meta">
+              <b>SWIFT GPI (Correspondent Banking)</b>
+              <span class="num mono text-muted">48 hrs (172,800,000 ms)</span>
+            </div>
+            <div class="race-track">
+              <div class="race-bar swift-bar" style="width: 0.2%;"></div>
+            </div>
+            <div class="race-sub">Multi-hop intermediary banks &bull; Batch clearing windows &bull; Nostro/Vostro locks</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Percentiles & Telemetry Cards -->
+      <div class="kpi-grid" style="margin-top:24px;">
+        <div class="kpi-card">
+          <div class="kpi-title">Median (P50) Latency</div>
+          <div class="kpi-value" id="lat-p50">--</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">P90 Latency</div>
+          <div class="kpi-value" id="lat-p90">--</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">P99 Latency</div>
+          <div class="kpi-value" id="lat-p99">--</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">Benchmark Avg</div>
+          <div class="kpi-value" id="lat-avg">--</div>
+        </div>
+      </div>
+
+      <!-- Recent Settlements Table -->
+      <div class="panel-section" style="margin-top:24px;">
+        <h3>Recent Settlement Telemetry</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Reference ID</th>
+                <th>Corridor</th>
+                <th>Total E2E</th>
+                <th>Rate Lock</th>
+                <th>Screening</th>
+                <th>VPA Verify</th>
+                <th>Funding</th>
+                <th>UPI Settle</th>
+              </tr>
+            </thead>
+            <tbody id="lat-table-body">
+              <tr><td colspan="8" class="empty-state">Loading telemetry...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: COST COMPARISON -->
+    <section id="tab-compare" class="tab-pane">
+      <div class="page-header">
+        <h1>Cross-Border Cost Comparison</h1>
+        <p class="subtitle">Live transparent fee and exchange rate breakdown against traditional remittance providers.</p>
+      </div>
+
+      <div class="compare-controls-bar">
+        <div class="form-group" style="min-width:200px;">
+          <label for="cmp-corridor">Corridor</label>
+          <select id="cmp-corridor"></select>
+        </div>
+        <div class="form-group" style="min-width:200px;">
+          <label for="cmp-amount">Transfer Amount</label>
+          <div class="input-with-symbol">
+            <input id="cmp-amount" type="number" value="1000" min="10" step="10">
+            <span class="symbol" id="cmp-ccy">USD</span>
+          </div>
+        </div>
+        <div style="align-self:flex-end;">
+          <button class="btn btn-primary" onclick="loadCostComparison()">Update Comparison</button>
+        </div>
+      </div>
+
+      <!-- Annual Savings Banner -->
+      <div class="savings-banner" id="savings-banner">
+        <div class="sb-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        </div>
+        <div class="sb-content">
+          <h3>Annual Savings: <span id="sb-amount" class="text-success">₹--</span></h3>
+          <p>By switching to RemitChain for regular monthly remittances, the beneficiary receives significantly more funds with zero hidden margins.</p>
+        </div>
+      </div>
+
+      <!-- Provider Grid -->
+      <div class="provider-grid" id="provider-cards">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Comparison Table -->
+      <div class="panel-section" style="margin-top:24px;">
+        <h3>Full Comparative Breakdown</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Channel Type</th>
+                <th>All-in Cost (Bps)</th>
+                <th>All-in Cost (%)</th>
+                <th>Recipient Receives</th>
+                <th>Net Difference vs RemitChain</th>
+              </tr>
+            </thead>
+            <tbody id="cmp-table-body">
+              <tr><td colspan="6" class="empty-state">Loading comparison...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
 
   </main>
 

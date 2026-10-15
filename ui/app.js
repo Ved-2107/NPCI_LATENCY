@@ -28,6 +28,8 @@ document.querySelectorAll('.nav-link').forEach(btn => {
     }
     if (tabId === 'compliance') loadComplianceDesk();
     if (tabId === 'insights') loadInsights();
+    if (tabId === 'latency') loadLatencyLab();
+    if (tabId === 'compare') loadCostComparison();
     
     // Close mobile menu if open
     document.querySelector('.primary-nav').classList.remove('open');
@@ -64,6 +66,16 @@ async function init() {
     });
     $('amt-ccy').innerText = corridors[cSelect.value].ccy;
     
+    // Also populate cost compare corridor selector
+    const cmpSelect = $('cmp-corridor');
+    if (cmpSelect) {
+      cmpSelect.innerHTML = Object.entries(corridors).map(([k,v]) => `<option value="${k}" data-ccy="${v.ccy}" data-dec="${v.decimals}">${k} - ${v.name}</option>`).join("");
+      cmpSelect.addEventListener('change', (e) => {
+        const opt = e.target.options[e.target.selectedIndex];
+        $('cmp-ccy').innerText = opt.dataset.ccy;
+      });
+      $('cmp-ccy').innerText = corridors[cmpSelect.value].ccy;
+    }
   } catch (e) {
     console.error("Init error", e);
     $('f-mode').innerText = "System Offline";
@@ -495,6 +507,138 @@ async function loadInsights() {
   }
 }
 
+async function loadLatencyLab() {
+  try {
+    const lat = await api("/api/latency");
+    const summary = lat.summary || {};
+    $('lat-p50').innerText = summary.p50Ms ? `${summary.p50Ms} ms` : '--';
+    $('lat-p90').innerText = summary.p90Ms ? `${summary.p90Ms} ms` : '--';
+    $('lat-p99').innerText = summary.p99Ms ? `${summary.p99Ms} ms` : '--';
+    $('lat-avg').innerText = summary.avgMs ? `${summary.avgMs} ms` : '--';
+
+    const speedup = lat.speedupVsSwift ? Math.round(lat.speedupVsSwift).toLocaleString() : '--';
+    $('speedup-val').innerText = `${speedup}x`;
+
+    const avgMs = summary.avgMs || 850;
+    $('race-rc-time').innerText = `${avgMs} ms`;
+    $('race-rc-bar').style.width = '100%';
+
+    const tbody = $('lat-table-body');
+    const recent = lat.recentSettlements || [];
+    if (!recent.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No settled transfers recorded yet. Initiate a transfer to see real-time latency breakdown.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = recent.map(r => {
+      const s = r.steps || {};
+      return `
+        <tr>
+          <td class="mono">${r.id}</td>
+          <td>${r.corridor}</td>
+          <td class="mono font-semibold" style="color:var(--primary);">${r.totalMs} ms</td>
+          <td class="mono">${s.lockQuoteMs != null ? s.lockQuoteMs + ' ms' : '--'}</td>
+          <td class="mono">${s.screeningMs != null ? s.screeningMs + ' ms' : '--'}</td>
+          <td class="mono">${s.beneficiaryLookupMs != null ? s.beneficiaryLookupMs + ' ms' : '--'}</td>
+          <td class="mono">${s.fundingLockMs != null ? s.fundingLockMs + ' ms' : '--'}</td>
+          <td class="mono">${s.settlementMs != null ? s.settlementMs + ' ms' : '--'}</td>
+        </tr>
+      `;
+    }).join("");
+  } catch (err) {
+    console.warn("Error loading latency lab:", err);
+  }
+}
+
+function updateSwimlaneStep(step) {
+  const allNodes = document.querySelectorAll('.lane-node');
+  const packet = $('bridge-packet');
+  
+  const stepOrder = ['CREATE', 'LOCK_QUOTE', 'SCREEN', 'VERIFY_BENEFICIARY', 'CONFIRM_FUNDING', 'SUBMIT_PAYOUT', 'SETTLE_PAYOUT'];
+  const curIdx = stepOrder.indexOf(step);
+  
+  allNodes.forEach(node => {
+    const s = node.dataset.step;
+    const sIdx = stepOrder.indexOf(s);
+    if (sIdx < curIdx) {
+      node.className = 'lane-node done-step';
+    } else if (sIdx === curIdx) {
+      node.className = 'lane-node active-step';
+    } else {
+      node.className = 'lane-node';
+    }
+  });
+
+  if (packet) {
+    if (['VERIFY_BENEFICIARY', 'CONFIRM_FUNDING'].includes(step)) {
+      packet.classList.add('relaying');
+      packet.style.transform = 'scale(1.2)';
+    } else {
+      packet.classList.remove('relaying');
+      packet.style.transform = 'scale(1)';
+    }
+  }
+}
+
+async function loadCostComparison() {
+  const corridorSelect = $('cmp-corridor');
+  const amountInput = $('cmp-amount');
+  if (!corridorSelect || !amountInput) return;
+  
+  const corridor = corridorSelect.value;
+  const ccyNode = corridorSelect.options[corridorSelect.selectedIndex];
+  const dec = ccyNode ? parseInt(ccyNode.dataset.dec) : 2;
+  const amtMinor = Math.round(parseFloat(amountInput.value) * Math.pow(10, dec));
+  
+  try {
+    const res = await api(`/api/compare?corridor=${corridor}&amountMinor=${amtMinor}`);
+    
+    // Annual savings banner
+    const annSavings = res.savingsVsBankWire ? res.savingsVsBankWire.annualRupees : 0;
+    $('sb-amount').innerText = `₹${annSavings.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+    
+    // Cards
+    const cardsContainer = $('provider-cards');
+    const providers = res.providers || [];
+    cardsContainer.innerHTML = providers.map(p => {
+      const isRc = p.provider === 'RemitChain';
+      return `
+        <div class="provider-card ${isRc ? 'card-featured' : ''}">
+          ${isRc ? '<span class="badge b-success p-badge">LOWEST COST</span>' : ''}
+          <div>
+            <h4>${p.provider}</h4>
+            <div class="p-receive">${formatInr(p.estimatedReceivePaise)}</div>
+            <div class="p-cost">All-in cost: <b>${p.costPercent}%</b> (${p.costBps} bps)</div>
+          </div>
+          <div class="p-savings ${isRc ? 'text-primary' : (p.savingVsRemitChain > 0 ? 'text-success' : '')}">
+            ${isRc ? 'Direct Rail / 0% Spread Markup' : `RemitChain gives +${formatInr(p.savingVsRemitChain)} more`}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Table
+    const tbody = $('cmp-table-body');
+    tbody.innerHTML = providers.map(p => {
+      const isRc = p.provider === 'RemitChain';
+      return `
+        <tr class="${isRc ? 'font-semibold' : ''}">
+          <td>${p.provider} ${isRc ? '★' : ''}</td>
+          <td><span class="badge b-info">${p.type}</span></td>
+          <td class="num">${p.costBps} bps</td>
+          <td class="num">${p.costPercent}%</td>
+          <td class="num font-semibold">${formatInr(p.estimatedReceivePaise)}</td>
+          <td class="num ${isRc ? 'text-primary' : 'text-success'}">
+            ${isRc ? 'Benchmark' : `+${formatInr(p.savingVsRemitChain)}`}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  } catch (err) {
+    showToast(`Error comparing costs: ${err.message}`, "error");
+  }
+}
+
 init();
 
 let ws;
@@ -519,6 +663,9 @@ function connectWS() {
   ws.onmessage = (msg) => {
     try {
       const e = JSON.parse(msg.data);
+      if (e.step) {
+        updateSwimlaneStep(e.step);
+      }
       if (e.type === 'state_change') {
         const detailView = document.getElementById('track-detail-view');
         if (detailView && detailView.style.display === 'block' && document.getElementById('dt-ref').innerText === e.remittanceId) {

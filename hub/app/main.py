@@ -202,6 +202,13 @@ def stats():
     return orch.stats()
 
 
+@app.get("/api/latency")
+def latency_telemetry():
+    """Retrieve detailed per-step latency metrics, percentiles (p50/p90/p95/p99) and benchmarks."""
+    return orch.get_latency_telemetry()
+
+
+
 # ── Audit & Compliance ──────────────────────────────────────────
 
 @app.get("/api/audit")

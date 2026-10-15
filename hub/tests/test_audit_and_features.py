@@ -205,3 +205,33 @@ def test_websocket_live_event_delivery(client):
         assert len(received_events) > 0
         assert any(e.get("step") in ("CREATE", "LOCK_QUOTE", "SCREEN", "VERIFY_BENEFICIARY", "SETTLE_PAYOUT") for e in received_events)
 
+
+def test_latency_telemetry_endpoint(client):
+    r = client.post("/api/remittances", json=create_body()).json()
+    rid = r["id"]
+    client.post(f"/api/remittances/{rid}/run")
+
+    resp = client.get("/api/latency")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "summary" in data
+    assert data["summary"]["count"] >= 1
+    assert data["summary"]["p50Ms"] >= 0
+    assert "speedupVsSwift" in data
+    assert data["speedupVsSwift"] > 0
+    assert "recentSettlements" in data
+    assert any(rec["id"] == rid for rec in data["recentSettlements"])
+
+
+def test_cost_comparison_endpoint(client):
+    resp = client.get("/api/compare?corridor=US-IN&amountMinor=100000")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["corridor"] == "US-IN"
+    assert "providers" in data
+    assert len(data["providers"]) >= 5
+    # RemitChain should be the lowest cost
+    assert data["providers"][0]["provider"] == "RemitChain"
+    assert data["savingsVsBankWire"]["annualRupees"] > 0
+
+
