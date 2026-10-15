@@ -1,21 +1,30 @@
 FROM python:3.12-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    LEDGER_MODE=memory \
+    PYTHONPATH=/app/hub
+
 WORKDIR /app
+
+# Create non-root user and group
+RUN groupadd -r app && useradd -r -g app -d /app -s /sbin/nologin app
 
 # Install dependencies
 COPY hub/requirements.txt hub/requirements.txt
 RUN pip install --no-cache-dir -r hub/requirements.txt
 
-# Copy application code
+# Copy application code and assets
 COPY hub/app hub/app
 COPY hub/tests hub/tests
 COPY ui ui
 COPY testvectors testvectors
 
-WORKDIR /app/hub
+# Set ownership to non-root user
+RUN chown -R app:app /app
 
-ENV LEDGER_MODE=memory
-ENV PYTHONPATH=/app/hub
+WORKDIR /app/hub
+USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
