@@ -287,4 +287,64 @@ def test_compliance_pending_endpoint(client):
     assert "riskBreakdown" in found
 
 
+def test_auth_jwt_token_and_rbac(client):
+    # Obtain JWT token for auditor
+    tok_resp = client.post("/api/auth/token", json={"userId": "auditor_smith", "role": "auditor"})
+    assert tok_resp.status_code == 200
+    token = tok_resp.json()["accessToken"]
+
+    # Call /api/auth/me with Bearer token
+    me_resp = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_resp.status_code == 200
+    me_data = me_resp.json()
+    assert me_data["userId"] == "auditor_smith"
+    assert me_data["role"] == "auditor"
+    assert me_data["authenticated"] is True
+
+    # Auditor accessing audit trail with Bearer token -> 200 OK
+    aud_resp = client.get("/api/audit", headers={"Authorization": f"Bearer {token}"})
+    assert aud_resp.status_code == 200
+
+    # Sender role attempting to access audit trail -> 403 Forbidden
+    sender_tok = client.post("/api/auth/token", json={"userId": "sender_joe", "role": "sender"}).json()["accessToken"]
+    forbidden_resp = client.get("/api/audit", headers={"Authorization": f"Bearer {sender_tok}"})
+    assert forbidden_resp.status_code == 403
+    assert forbidden_resp.json()["detail"]["code"] == "ERR_FORBIDDEN"
+
+
+def test_pii_vault_and_gdpr_shredding(client):
+    # Create remittance with PII
+    b = create_body(senderName="Deepika Padukone", beneficiaryName="Ranveer Singh", beneficiaryVpa="ranveer@okbank")
+    r = client.post("/api/remittances", json=b).json()
+    rid = r["id"]
+
+    # Verify PII status in vault
+    status_resp = client.get(f"/api/pii/{rid}/status")
+    assert status_resp.status_code == 200
+    assert status_resp.json()["status"] == "ACTIVE"
+
+    # Retrieve off-ledger PII
+    pii_resp = client.get(f"/api/pii/{rid}")
+    assert pii_resp.status_code == 200
+    pii = pii_resp.json()["pii"]
+    assert pii["senderName"] == "Deepika Padukone"
+    assert pii["beneficiaryVpa"] == "ranveer@okbank"
+
+    # GDPR Right-to-be-Forgotten: shred off-ledger PII
+    del_resp = client.delete(f"/api/pii/{rid}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["status"] == "SHREDDED"
+
+    # Post-shredding: PII retrieval must return 410 Gone
+    gone_resp = client.get(f"/api/pii/{rid}")
+    assert gone_resp.status_code == 410
+    assert gone_resp.json()["detail"]["code"] == "ERR_PII_SHREDDED"
+
+    # Verify ledger still retains immutable record and trail
+    ledger_rec = client.get(f"/api/remittances/{rid}").json()
+    assert ledger_rec["id"] == rid
+    assert "senderHash" in ledger_rec  # Salted hash remains for verification
+
+
+
 

@@ -11,6 +11,7 @@ from . import fx, pricing, risk, upi
 from .events import broadcaster
 from .ledger import LedgerError, PAYOUT, REMITTER
 from .notifications import notifier
+from .pii_vault import vault as pii_vault
 
 logger = logging.getLogger("remitchain.orchestrator")
 
@@ -114,6 +115,15 @@ class Orchestrator:
 
         rid = "R" + uuid.uuid4().hex[:10].upper()
         sender_h, ben_h = h(p["senderName"]), h(p["beneficiaryVpa"])
+        
+        # Store sensitive PII encrypted in off-ledger vault
+        pii_vault.store(rid, {
+            "senderName": p.get("senderName"),
+            "beneficiaryName": p.get("beneficiaryName"),
+            "beneficiaryVpa": p.get("beneficiaryVpa"),
+            "purpose": p.get("purpose")
+        })
+
         with self._lock:
             self.meta[rid] = {
                 **p,

@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -19,7 +19,8 @@ logger = logging.getLogger("remitchain.api")
 
 from contextlib import asynccontextmanager
 
-from . import fx, upi
+from . import auth, fx, upi
+from .pii_vault import vault as pii_vault, PiiShreddedError
 from .audit import filter_trail, to_csv, compliance_summary
 from .calculator import compare
 from .events import broadcaster
@@ -60,9 +61,15 @@ UI_DIR = Path(__file__).resolve().parents[2] / "ui"
 idempotency_store: dict[str, dict] = {}
 
 
+class AuthTokenRequest(BaseModel):
+    userId: str
+    role: str = "sender"
+
+
 class QuoteRequest(BaseModel):
     corridor: str
     amountMinor: int = Field(gt=0, le=1_000_000_000)
+
 
 
 class UpiLookupRequest(BaseModel):
@@ -120,6 +127,26 @@ def health():
 @app.get("/api/corridors")
 def corridors():
     return {k: fx.corridor_info(k) for k in fx.CORRIDORS}
+
+
+# ── Auth & RBAC ──────────────────────────────────────────────────
+
+@app.post("/api/auth/token")
+def auth_token(body: AuthTokenRequest):
+    """Issue a signed JWT access token with role claims."""
+    token = auth.create_access_token(body.userId, body.role)
+    return {
+        "accessToken": token,
+        "tokenType": "bearer",
+        "userId": body.userId,
+        "role": body.role,
+    }
+
+
+@app.get("/api/auth/me")
+def auth_me(user: dict = Depends(auth.get_current_user)):
+    """Return identity and roles of current authenticated user."""
+    return user
 
 
 # ── Quote & Pricing ─────────────────────────────────────────────
@@ -190,6 +217,37 @@ def history(rid: str):
     return guard(ledger.GetRemittanceHistory, rid)
 
 
+# ── Off-Ledger Encrypted PII & GDPR ──────────────────────────────
+
+@app.get("/api/pii/{rid}")
+def get_remittance_pii(rid: str, user: dict = Depends(auth.require_role("sender", "compliance_officer", "admin"))):
+    """Retrieve off-ledger decrypted PII. Returns 410 Gone if cryptographically shredded."""
+    try:
+        data = pii_vault.retrieve(rid)
+        return {"remittanceId": rid, "status": "ACTIVE", "pii": data}
+    except PiiShreddedError as e:
+        raise HTTPException(status_code=410, detail={"code": "ERR_PII_SHREDDED", "message": str(e)})
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail={"code": "ERR_NOT_FOUND", "message": str(e)})
+
+
+@app.delete("/api/pii/{rid}")
+def shred_remittance_pii(rid: str, user: dict = Depends(auth.require_role("sender", "compliance_officer", "admin"))):
+    """GDPR Article 17 Right-to-be-Forgotten: permanently shred off-ledger PII while preserving on-chain hashes and audit proof."""
+    try:
+        res = pii_vault.shred(rid)
+        logger.info("PII for remittance %s cryptographically shredded by user %s", rid, user.get("userId"))
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail={"code": "ERR_NOT_FOUND", "message": str(e)})
+
+
+@app.get("/api/pii/{rid}/status")
+def get_remittance_pii_status(rid: str):
+    """Check PII vault retention status without exposing plaintext."""
+    return pii_vault.status(rid)
+
+
 @app.post("/api/remittances/{rid}/step")
 async def step(rid: str):
     return await run_in_threadpool(guard, orch.step, rid)
@@ -201,8 +259,13 @@ async def run(rid: str):
 
 
 @app.post("/api/remittances/{rid}/review")
-async def review(rid: str, body: Review, x_reviewer_id: str | None = Header(None, alias="X-Reviewer-Id")):
-    reviewer = body.reviewerId or x_reviewer_id or "compliance_officer_default"
+async def review(
+    rid: str,
+    body: Review,
+    user: dict = Depends(auth.require_role("compliance_officer", "admin")),
+    x_reviewer_id: str | None = Header(None, alias="X-Reviewer-Id")
+):
+    reviewer = body.reviewerId or x_reviewer_id or user.get("userId") or "compliance_officer_default"
     return await run_in_threadpool(guard, orch.review, rid, body.approve, reviewer_id=reviewer)
 
 
@@ -261,6 +324,7 @@ def audit(
     status: str = None, corridor: str = None,
     from_ts: int = None, to_ts: int = None,
     min_risk: int = None, search: str = None,
+    user: dict = Depends(auth.require_role("auditor", "compliance_officer", "admin")),
 ):
     rs = ledger.ListRemittances()
     filters = {k: v for k, v in {
