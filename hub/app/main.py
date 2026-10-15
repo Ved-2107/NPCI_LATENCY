@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -201,7 +202,7 @@ async def ws_events(ws: WebSocket):
     try:
         # Send recent events on connect
         for event in broadcaster.recent_events[-20:]:
-            await ws.send_text(__import__("json").dumps(event))
+            await ws.send_text(json.dumps(event))
         while True:
             await ws.receive_text()  # keep connection alive
     except WebSocketDisconnect:
