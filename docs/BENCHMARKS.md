@@ -3,10 +3,20 @@
 Results from load testing RemitChain Hub in demo mode (MemoryLedger, single process).
 
 ## Test Configuration
-- **Tool:** Locust 2.x
+- **Tool:** Locust 2.x (`benchmarks/locustfile.py`)
 - **Host:** localhost:8000 (uvicorn, single worker)
 - **Duration:** 60 seconds
 - **Users:** 50 concurrent, spawn rate 10/s
+
+### Running Load Tests
+```bash
+# Install Locust if not present
+pip install locust
+
+# Execute headless load test
+locust -f benchmarks/locustfile.py --headless -u 50 -r 10 --run-time 60s --host http://localhost:8000
+```
+
 
 ## Results
 
