@@ -1,4 +1,4 @@
-module github.com/your-team/remitchain/chaincode/remit
+module github.com/Ved-2107/NPCI_LATENCY/chaincode/remit
 
 go 1.21
 
