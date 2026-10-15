@@ -346,5 +346,57 @@ def test_pii_vault_and_gdpr_shredding(client):
     assert "senderHash" in ledger_rec  # Salted hash remains for verification
 
 
+def test_prometheus_metrics_endpoint(client):
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    assert "text/plain" in resp.headers["content-type"]
+    text = resp.text
+    assert "remitchain_transfers_total" in text
+    assert "remitchain_active_websockets" in text
+    assert "remitchain_settlement_duration_seconds" in text
+
+
+def test_async_202_execution_and_job_polling(client):
+    import time
+    r = client.post("/api/remittances", json=create_body()).json()
+    rid = r["id"]
+
+    # Submit async execution -> 202 Accepted
+    async_resp = client.post(f"/api/remittances/{rid}/async-run")
+    assert async_resp.status_code == 202
+    data = async_resp.json()
+    assert data["status"] == "QUEUED"
+    job_id = data["jobId"]
+
+    # Poll job status until COMPLETED (with timeout)
+    for _ in range(30):
+        job_info = client.get(f"/api/jobs/{job_id}").json()
+        if job_info["status"] == "COMPLETED":
+            break
+        time.sleep(0.05)
+
+    assert job_info["status"] == "COMPLETED"
+
+    # Confirm remittance settled on ledger
+    settled = client.get(f"/api/remittances/{rid}").json()
+    assert settled["status"] == "SETTLED"
+
+
+def test_cryptographic_trail_verification(client):
+    r = client.post("/api/remittances", json=create_body()).json()
+    rid = r["id"]
+    client.post(f"/api/remittances/{rid}/run")
+
+    verify_resp = client.get(f"/api/remittances/{rid}/verify")
+    assert verify_resp.status_code == 200
+    v = verify_resp.json()
+    assert v["remittanceId"] == rid
+    assert v["verified"] is True
+    assert v["tamperDetected"] is False
+    assert v["stepsCount"] >= 7
+    assert len(v["finalChainHash"]) == 64  # SHA-256 hex digest
+
+
+
 
 

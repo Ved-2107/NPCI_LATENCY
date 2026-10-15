@@ -24,10 +24,13 @@ from .pii_vault import vault as pii_vault, PiiShreddedError
 from .audit import filter_trail, to_csv, compliance_summary
 from .calculator import compare
 from .events import broadcaster
+from .jobs import job_manager
 from .ledger import LedgerError, make_ledger
+from .metrics import render_prometheus_metrics
 from .notifications import notifier
 from .orchestrator import Orchestrator
 from .risk import explain as risk_explain
+from .verifier import verify_trail
 
 
 @asynccontextmanager
@@ -122,6 +125,13 @@ def guard(fn, *a, **kw):
 @app.get("/api/health")
 def health():
     return {"ok": True, "ledgerMode": ledger.mode, "wsConnections": broadcaster.connection_count}
+
+
+@app.get("/metrics")
+def prometheus_metrics():
+    """Prometheus exposition format metrics."""
+    content = render_prometheus_metrics(ledger, orch, broadcaster)
+    return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.get("/api/corridors")
@@ -258,6 +268,30 @@ async def run(rid: str):
     return await run_in_threadpool(guard, orch.run, rid)
 
 
+@app.post("/api/remittances/{rid}/async-run", status_code=202)
+def async_run(rid: str, response: Response):
+    """Execute remittance asynchronously in background threadpool (HTTP 202 Accepted)."""
+    guard(ledger.GetRemittance, rid)
+    job_id = job_manager.submit(orch.run, rid)
+    response.status_code = 202
+    return {
+        "jobId": job_id,
+        "remittanceId": rid,
+        "status": "QUEUED",
+        "pollUrl": f"/api/jobs/{job_id}",
+        "message": "Transfer execution queued in background worker",
+    }
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job_status(job_id: str):
+    """Check background worker job status."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail={"code": "ERR_NOT_FOUND", "message": f"Job {job_id} not found"})
+    return job
+
+
 @app.post("/api/remittances/{rid}/review")
 async def review(
     rid: str,
@@ -383,6 +417,14 @@ def track_transfer(rid: str):
                    for t in r.get("trail", [])],
         "notifications": notifier.get_for_remittance(rid),
     }
+
+
+@app.get("/api/remittances/{rid}/verify")
+def verify_remittance_trail(rid: str):
+    """Cryptographically verify the integrity and hash-chain of a remittance audit trail."""
+    r = guard(ledger.GetRemittance, rid)
+    return verify_trail(r)
+
 
 
 # ── WebSocket ────────────────────────────────────────────────────
