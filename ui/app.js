@@ -182,23 +182,54 @@ $('btn-submit').addEventListener('click', async () => {
 });
 
 // Tracking
+let transferCache = [];
+
+function renderTransferRows(items) {
+  const tbody = $('tx-table-body');
+  if (!items || !items.length) {
+    const q = ($('search-tx') ? $('search-tx').value : '').trim();
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${q ? "No transfers match your search query." : "No transfers found."}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(r => `
+    <tr>
+      <td class="mono">${r.id}</td>
+      <td>${r.corridor}</td>
+      <td><span class="badge ${getStatusClass(r.status)}">${r.status}</span></td>
+      <td>${new Date(r.updatedAt * 1000).toLocaleString()}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openDetail('${r.id}')">View</button></td>
+    </tr>
+  `).join("");
+}
+
+function filterTransfers() {
+  const searchInput = $('search-tx');
+  const q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+  if (!q) {
+    renderTransferRows(transferCache);
+    return;
+  }
+  const filtered = transferCache.filter(r =>
+    (r.id && r.id.toLowerCase().includes(q)) ||
+    (r.status && r.status.toLowerCase().includes(q)) ||
+    (r.corridor && r.corridor.toLowerCase().includes(q))
+  );
+  renderTransferRows(filtered);
+}
+
+// Wire up search input listener
+if ($('search-tx')) {
+  $('search-tx').addEventListener('input', filterTransfers);
+}
+
 async function loadTransferList() {
   $('track-list-view').style.display = 'block';
   $('track-detail-view').style.display = 'none';
   const tbody = $('tx-table-body');
   try {
     const list = await api("/api/remittances");
-    if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No transfers found.</td></tr>`; return; }
-    
-    tbody.innerHTML = list.map(r => `
-      <tr>
-        <td class="mono">${r.id}</td>
-        <td>${r.corridor}</td>
-        <td><span class="badge ${getStatusClass(r.status)}">${r.status}</span></td>
-        <td>${new Date(r.updatedAt * 1000).toLocaleString()}</td>
-        <td><button class="btn btn-secondary btn-sm" onclick="openDetail('${r.id}')">View</button></td>
-      </tr>
-    `).join("");
+    transferCache = list || [];
+    filterTransfers();
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Error loading transfers.</td></tr>`;
   }
