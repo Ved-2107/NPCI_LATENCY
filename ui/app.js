@@ -452,39 +452,120 @@ function closeDetail() {
   $('track-detail-view').style.display = 'none';
 }
 
+// Beneficiary Pre-Send Verification
+async function verifyVpaPreSend() {
+  const vpa = ($('vpa') ? $('vpa').value : '').trim();
+  const declaredName = ($('benName') ? $('benName').value : '').trim();
+  const badge = $('vpa-status-badge');
+  const btn = $('btn-verify-vpa');
+  
+  if (!vpa) {
+    showToast("Please enter a VPA to verify.", "warn");
+    return;
+  }
+  
+  if (btn) btn.disabled = true;
+  if (badge) {
+    badge.style.display = 'block';
+    badge.style.color = 'var(--text-muted)';
+    badge.innerText = 'Verifying VPA with NPCI switch...';
+  }
+  
+  try {
+    const res = await api("/api/upi/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vpa, declaredName, scenario: $('scenario') ? $('scenario').value : 'happy' })
+    });
+    
+    if (res.verified) {
+      badge.style.color = 'var(--success-txt)';
+      badge.innerText = `✓ ${res.message}`;
+      showToast(res.message, "success");
+    } else {
+      badge.style.color = 'var(--warn-txt)';
+      badge.innerText = `⚠ ${res.message}`;
+      showToast(res.message, "warn");
+    }
+  } catch (err) {
+    badge.style.color = 'var(--err-txt)';
+    badge.innerText = `✗ Verification error: ${err.message}`;
+    showToast(`Verification error: ${err.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function formatSLA(sec) {
+  if (sec < 60) return `${sec}s elapsed`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m ${s}s elapsed`;
+}
+
 // Compliance Desk
 async function loadComplianceDesk() {
   const tbody = $('comp-table-body');
   try {
-    const list = await api("/api/remittances");
-    const held = list.filter(r => r.status === 'HELD');
-    if (!held.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No transfers pending review.</td></tr>`; return; }
+    const held = await api("/api/compliance/pending");
+    if (!held.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No transfers pending review. All queues clear.</td></tr>`;
+      return;
+    }
     
-    tbody.innerHTML = held.map(r => `
-      <tr>
-        <td class="mono">${r.id}</td>
-        <td><b style="color:var(--warn-txt)">${r.riskScore}</b>/100</td>
-        <td>${(r.reasonCodes || []).join(", ") || "Manual review"}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="reviewHold('${r.id}', true)">Approve</button>
-          <button class="btn btn-secondary btn-sm" style="color:var(--err-txt); border-color:var(--err-txt);" onclick="reviewHold('${r.id}', false)">Reject</button>
-        </td>
-      </tr>
-    `).join("");
+    tbody.innerHTML = held.map(r => {
+      const risk = r.riskBreakdown || {};
+      const features = [];
+      if (risk.amount_risk) features.push(`Amt: +${risk.amount_risk}`);
+      if (risk.velocity_risk) features.push(`Velocity: +${risk.velocity_risk}`);
+      if (risk.corridor_risk) features.push(`Corridor: +${risk.corridor_risk}`);
+      const waterfallText = features.join(" | ") || "Baseline screening";
+
+      return `
+        <tr>
+          <td class="mono font-semibold">${r.id}</td>
+          <td><b>${r.creatorId || 'remitter'}</b></td>
+          <td>
+            <span class="badge ${r.slaBreached ? 'b-err' : 'b-warn'}">
+              ${r.slaBreached ? '⚠ SLA BREACHED: ' : ''}${formatSLA(r.elapsedSeconds)}
+            </span>
+          </td>
+          <td>
+            <div><b style="color:var(--warn-txt);">${r.riskScore}</b>/100</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${waterfallText}</div>
+          </td>
+          <td>${(r.reasonCodes || []).join(", ") || "Manual review threshold"}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="reviewHold('${r.id}', true)">Approve</button>
+            <button class="btn btn-secondary btn-sm" style="color:var(--err-txt); border-color:var(--err-txt);" onclick="reviewHold('${r.id}', false)">Reject</button>
+          </td>
+        </tr>
+      `;
+    }).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Error loading compliance data.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error loading compliance data: ${e.message}</td></tr>`;
   }
 }
 
 async function reviewHold(rid, approve) {
-  if (!confirm(`Are you sure you want to ${approve ? 'approve' : 'reject'} transfer ${rid}?`)) return;
+  const officerInput = $('comp-officer-id');
+  const reviewerId = (officerInput ? officerInput.value : '').trim() || 'compliance_officer_42';
+  
+  if (!confirm(`Are you sure you want to ${approve ? 'approve' : 'reject'} transfer ${rid} as officer '${reviewerId}'?`)) return;
   try {
-    await api(`/api/remittances/${rid}/review`, { method: "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({approve}) });
+    await api(`/api/remittances/${rid}/review`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Reviewer-Id": reviewerId
+      },
+      body: JSON.stringify({ approve, reviewerId })
+    });
     if (approve) await api(`/api/remittances/${rid}/run`, { method: "POST" });
-    showToast(`Transfer ${rid} ${approve ? 'approved and resumed' : 'rejected'}`, approve ? 'success' : 'warn');
+    showToast(`Transfer ${rid} ${approve ? 'approved and resumed' : 'rejected'} by ${reviewerId}`, approve ? 'success' : 'warn');
     loadComplianceDesk();
   } catch(e) {
-    showToast(e.message, "error");
+    showToast(`Review failed: ${e.message}`, "error");
   }
 }
 

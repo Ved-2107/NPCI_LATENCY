@@ -109,7 +109,11 @@
               </div>
               <div class="form-group">
                 <label for="vpa">Beneficiary VPA / UPI ID <span class="req">*</span></label>
-                <input id="vpa" type="text" value="meera@okbank" required>
+                <div style="display:flex; gap:8px;">
+                  <input id="vpa" type="text" value="meera@okbank" required style="flex:1;">
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-verify-vpa" onclick="verifyVpaPreSend()" style="white-space:nowrap;">Verify UPI</button>
+                </div>
+                <div id="vpa-status-badge" style="margin-top:6px; font-size:12px; display:none;"></div>
                 <div class="helper-text">e.g., name@bank</div>
               </div>
             </div>
@@ -315,22 +319,42 @@
 
     <!-- TAB: COMPLIANCE DESK -->
     <section id="tab-compliance" class="tab-pane">
-      <div class="page-header">
-        <h1>Compliance Desk</h1>
-        <p class="subtitle">Review transfers flagged by the AI risk engine or AML rules.</p>
+      <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+        <div>
+          <h1>Maker-Checker Compliance Desk</h1>
+          <p class="subtitle">Review transfers held by AI risk engine, corridor daily caps, or AML rules with strict Maker-Checker enforcement.</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <a href="/api/audit/export" class="btn btn-secondary btn-sm" download="remitchain_audit.csv">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Export Audit CSV
+          </a>
+          <button class="btn btn-secondary btn-sm" onclick="loadComplianceDesk()">Refresh Desk</button>
+        </div>
       </div>
-      <div class="table-container">
+
+      <div class="compare-controls-bar" style="margin-top:16px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="comp-officer-id" style="font-size:12px;">Reviewing Officer ID (Checker Identity)</label>
+          <input id="comp-officer-id" type="text" value="compliance_officer_42" style="padding:6px 10px; font-size:13px; font-family:var(--font-mono);">
+          <div class="helper-text" style="font-size:11px;">Maker-Checker policy: Reviewer cannot be the remittance creator.</div>
+        </div>
+      </div>
+
+      <div class="table-container" style="margin-top:16px;">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Reference</th>
-              <th>Risk Score</th>
+              <th>Reference ID</th>
+              <th>Remitter (Maker)</th>
+              <th>SLA Timer</th>
+              <th>Risk Score & Waterfall</th>
               <th>Reason Codes</th>
-              <th>Actions</th>
+              <th>Maker-Checker Actions</th>
             </tr>
           </thead>
           <tbody id="comp-table-body">
-            <tr><td colspan="4" class="empty-state">No transfers pending review.</td></tr>
+            <tr><td colspan="6" class="empty-state">No transfers pending review.</td></tr>
           </tbody>
         </table>
       </div>

@@ -219,12 +219,20 @@ class Orchestrator:
                     time.sleep(self.step_delay)
             return self.ledger.GetRemittance(rid)
 
-    def review(self, rid: str, approve: bool) -> dict:
+    def review(self, rid: str, approve: bool, reviewer_id: str | None = None) -> dict:
         with self._get_remittance_lock(rid):
+            with self._lock:
+                m = self.meta.get(rid, {})
+                creator = (m.get("creatorId") or m.get("senderName") or "").strip().lower()
+            
+            if reviewer_id and creator and reviewer_id.strip().lower() == creator:
+                raise ValueError("maker cannot be checker: reviewer must differ from remittance creator")
+
             self.ledger.ReviewHold(REMITTER, rid, approve, "" if approve else "Rejected by compliance officer")
             r = self.ledger.GetRemittance(rid)
             self._emit(r, "REVIEW_APPROVE" if approve else "REVIEW_REJECT")
             return r
+
 
     def get_risk_detail(self, rid: str) -> dict:
         with self._lock:

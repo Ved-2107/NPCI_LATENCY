@@ -19,7 +19,7 @@ logger = logging.getLogger("remitchain.api")
 
 from contextlib import asynccontextmanager
 
-from . import fx
+from . import fx, upi
 from .audit import filter_trail, to_csv, compliance_summary
 from .calculator import compare
 from .events import broadcaster
@@ -65,6 +65,12 @@ class QuoteRequest(BaseModel):
     amountMinor: int = Field(gt=0, le=1_000_000_000)
 
 
+class UpiLookupRequest(BaseModel):
+    vpa: str
+    declaredName: str = ""
+    scenario: str = "happy"
+
+
 class NewRemittance(BaseModel):
     corridor: str
     senderName: str = Field(min_length=2)
@@ -74,10 +80,12 @@ class NewRemittance(BaseModel):
     amountMinor: int = Field(gt=0, le=1_000_000_000)
     scenario: str = "happy"
     quoteId: str | None = None
+    creatorId: str | None = None
 
 
 class Review(BaseModel):
     approve: bool
+    reviewerId: str | None = None
 
 
 def guard(fn, *a, **kw):
@@ -86,6 +94,8 @@ def guard(fn, *a, **kw):
     except (LedgerError, ValueError, KeyError) as e:
         msg = str(e)
         msg_lower = msg.lower()
+        if "maker cannot be checker" in msg_lower:
+            raise HTTPException(status_code=403, detail={"code": "ERR_MAKER_CHECKER", "message": msg})
         if "not found" in msg_lower:
             raise HTTPException(status_code=404, detail={"code": "ERR_NOT_FOUND", "message": msg})
         if (
@@ -140,6 +150,14 @@ def cost_compare(
     return guard(compare, corridor, amountMinor)
 
 
+# ── UPI Verification ─────────────────────────────────────────────
+
+@app.post("/api/upi/lookup")
+def upi_lookup(body: UpiLookupRequest):
+    """Pre-send verification of beneficiary UPI ID."""
+    return upi.lookup_vpa(body.vpa, body.declaredName, scenario=body.scenario)
+
+
 # ── Remittance CRUD ──────────────────────────────────────────────
 
 @app.post("/api/remittances")
@@ -183,8 +201,35 @@ async def run(rid: str):
 
 
 @app.post("/api/remittances/{rid}/review")
-async def review(rid: str, body: Review):
-    return await run_in_threadpool(guard, orch.review, rid, body.approve)
+async def review(rid: str, body: Review, x_reviewer_id: str | None = Header(None, alias="X-Reviewer-Id")):
+    reviewer = body.reviewerId or x_reviewer_id or "compliance_officer_default"
+    return await run_in_threadpool(guard, orch.review, rid, body.approve, reviewer_id=reviewer)
+
+
+@app.get("/api/compliance/pending")
+def compliance_pending():
+    """List pending HELD remittances with elapsed SLA timers and risk breakdown."""
+    import time
+    rs = ledger.ListRemittances()
+    held = [r for r in rs if r["status"] == "HELD"]
+    now = time.time()
+    results = []
+    for r in held:
+        trail = r.get("trail", [])
+        hold_trail = next((t for t in reversed(trail) if t["step"] in ("SCREEN", "HELD")), None)
+        hold_ts = hold_trail.get("ts", r.get("updatedAt", now)) if hold_trail else r.get("updatedAt", now)
+        elapsed_sec = int(now - hold_ts)
+        meta = orch.meta.get(r["id"], {})
+        results.append({
+            **r,
+            "creatorId": meta.get("creatorId", meta.get("senderName", "remitter")),
+            "holdTimestamp": hold_ts,
+            "elapsedSeconds": elapsed_sec,
+            "slaBreached": elapsed_sec > 900,
+            "riskBreakdown": meta.get("risk_breakdown", {}),
+        })
+    return results
+
 
 
 # ── Risk Explainability ─────────────────────────────────────────

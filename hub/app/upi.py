@@ -23,6 +23,47 @@ def resolve_vpa(vpa: str, scenario: str = "happy") -> str | None:
     return handle if len(handle) >= 2 else "Verified Beneficiary"
 
 
+def lookup_vpa(vpa: str, declared_name: str = "", scenario: str = "happy") -> dict:
+    """Pre-send verification of beneficiary UPI ID."""
+    if not vpa or not VPA_RE.match(vpa):
+        return {
+            "vpa": vpa,
+            "status": "INVALID_FORMAT",
+            "registeredName": None,
+            "bank": None,
+            "matchScore": 0,
+            "verified": False,
+            "message": "Invalid UPI VPA format. Expected name@bank."
+        }
+    
+    registered = resolve_vpa(vpa, scenario=scenario)
+    if not registered:
+        return {
+            "vpa": vpa,
+            "status": "NOT_FOUND",
+            "registeredName": None,
+            "bank": None,
+            "matchScore": 0,
+            "verified": False,
+            "message": "UPI VPA unresolvable with receiving bank."
+        }
+        
+    bank = vpa.split("@")[1].upper()
+    score = name_match(declared_name, registered) if declared_name else 100
+    is_verified = score >= 70
+    
+    return {
+        "vpa": vpa,
+        "status": "VERIFIED" if is_verified else "NAME_MISMATCH",
+        "registeredName": registered,
+        "bank": bank,
+        "matchScore": score,
+        "verified": is_verified,
+        "message": f"Verified: {registered} ({bank})" if is_verified else f"Name mismatch: Registered as '{registered}' ({score}% match)"
+    }
+
+
+
 def submit(remittance_id: str) -> str:
     return "PAY" + hashlib.sha256(remittance_id.encode()).hexdigest()[:12].upper()
 

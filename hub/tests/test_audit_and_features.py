@@ -235,3 +235,56 @@ def test_cost_comparison_endpoint(client):
     assert data["savingsVsBankWire"]["annualRupees"] > 0
 
 
+def test_upi_pre_send_lookup(client):
+    # Valid VPA
+    r1 = client.post("/api/upi/lookup", json={"vpa": "meera@okbank", "declaredName": "Meera Rao"})
+    assert r1.status_code == 200
+    d1 = r1.json()
+    assert d1["verified"] is True
+    assert d1["bank"] == "OKBANK"
+    assert d1["matchScore"] >= 70
+
+    # Invalid VPA format
+    r2 = client.post("/api/upi/lookup", json={"vpa": "invalidvpa", "declaredName": "Meera Rao"})
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "INVALID_FORMAT"
+    assert r2.json()["verified"] is False
+
+
+def test_maker_checker_enforcement(client):
+    # Transfer created by Asha Rao
+    b = create_body(senderName="Asha Rao", scenario="high_risk")
+    r = client.post("/api/remittances", json=b).json()
+    rid = r["id"]
+
+    # Run to trigger compliance hold
+    held = client.post(f"/api/remittances/{rid}/run").json()
+    assert held["status"] == "HELD"
+
+    # Maker (Asha Rao) tries to approve own transfer -> 403 Forbidden
+    rej_maker = client.post(f"/api/remittances/{rid}/review", json={"approve": True, "reviewerId": "Asha Rao"})
+    assert rej_maker.status_code == 403
+    assert rej_maker.json()["detail"]["code"] == "ERR_MAKER_CHECKER"
+
+    # Separate Checker (Officer Vikram) approves -> 200 OK
+    appr = client.post(f"/api/remittances/{rid}/review", json={"approve": True, "reviewerId": "Officer Vikram"})
+    assert appr.status_code == 200
+    assert appr.json()["status"] in ("CREATED", "QUOTED", "SCREENED", "VERIFIED", "FUNDED", "PAYOUT_SUBMITTED", "SETTLED")
+
+
+def test_compliance_pending_endpoint(client):
+    b = create_body(scenario="high_risk")
+    r = client.post("/api/remittances", json=b).json()
+    rid = r["id"]
+    client.post(f"/api/remittances/{rid}/run")
+
+    pending = client.get("/api/compliance/pending").json()
+    assert len(pending) >= 1
+    found = next((item for item in pending if item["id"] == rid), None)
+    assert found is not None
+    assert found["status"] == "HELD"
+    assert "elapsedSeconds" in found
+    assert "riskBreakdown" in found
+
+
+
