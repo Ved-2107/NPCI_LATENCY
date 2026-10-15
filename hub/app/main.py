@@ -149,6 +149,7 @@ def risk_detail(rid: str):
         r.get("purpose", ""),
         hist,
         meta.get("newBeneficiary", False),
+        force_high=(meta.get("scenario") == "high_risk"),
     )
 
 
