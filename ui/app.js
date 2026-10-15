@@ -399,20 +399,63 @@ async function loadInsights() {
 init();
 
 let ws;
+let wsRetryDelay = 1000;
+const MAX_WS_RETRY_DELAY = 30000;
+
 function connectWS() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
+  try {
+    ws = new WebSocket(`${protocol}//${location.host}/ws/events`);
+  } catch (err) {
+    console.warn("WebSocket initialization error:", err);
+    scheduleWsReconnect();
+    return;
+  }
+
+  ws.onopen = () => {
+    wsRetryDelay = 1000;
+    console.info("WebSocket connected to event stream");
+  };
+
   ws.onmessage = (msg) => {
     try {
       const e = JSON.parse(msg.data);
       if (e.type === 'state_change') {
-        if (document.getElementById('track-detail-view').style.display === 'block' && document.getElementById('dt-ref').innerText === e.remittanceId) {
+        const detailView = document.getElementById('track-detail-view');
+        if (detailView && detailView.style.display === 'block' && document.getElementById('dt-ref').innerText === e.remittanceId) {
           openDetail(e.remittanceId);
         }
+        // If track list is open, refresh or update cache
+        const listView = document.getElementById('track-list-view');
+        if (listView && listView.style.display !== 'none') {
+          const item = transferCache.find(r => r.id === e.remittanceId);
+          if (item) {
+            item.status = e.status;
+            item.updatedAt = Math.floor(Date.now() / 1000);
+            filterTransfers();
+          }
+        }
       }
-    } catch(err){}
+    } catch(err) {
+      console.warn("Error parsing WebSocket message:", err);
+    }
   };
-  ws.onclose = () => setTimeout(connectWS, 2000);
+
+  ws.onerror = (err) => {
+    console.warn("WebSocket stream error:", err);
+  };
+
+  ws.onclose = () => {
+    scheduleWsReconnect();
+  };
 }
+
+function scheduleWsReconnect() {
+  const jitter = Math.random() * 500;
+  const delay = Math.min(wsRetryDelay + jitter, MAX_WS_RETRY_DELAY);
+  wsRetryDelay = Math.min(wsRetryDelay * 1.5, MAX_WS_RETRY_DELAY);
+  setTimeout(connectWS, delay);
+}
+
 connectWS();
 
