@@ -103,8 +103,12 @@ def create(body: NewRemittance):
 
 
 @app.get("/api/remittances")
-def list_all():
-    return list(reversed(ledger.ListRemittances()))
+def list_all(
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    limit: int = Query(50, ge=1, le=200, description="Page limit"),
+):
+    all_items = list(reversed(ledger.ListRemittances()))
+    return all_items[offset:offset + limit]
 
 
 @app.get("/api/remittances/{rid}")

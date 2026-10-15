@@ -5,6 +5,7 @@ MemoryLedger  - in-process port of chaincode/remit/remit.go so the demo runs wit
 DrunixLedger  - real calls to the `remit` chaincode on a Drunix network via the `peer` CLI.
 Select with LEDGER_MODE=memory|drunix.
 """
+import copy
 import json
 import logging
 import os
@@ -48,7 +49,7 @@ class MemoryLedger:
         with self._lock:
             if rid not in self.state:
                 raise LedgerError(f"remittance {rid} not found")
-            return json.loads(json.dumps(self.state[rid]))
+            return copy.deepcopy(self.state[rid])
 
     def _status(self, r, *allowed):
         if r["status"] not in allowed:
@@ -189,7 +190,7 @@ class MemoryLedger:
 
     def ListRemittances(self):
         with self._lock:
-            return sorted((json.loads(json.dumps(v)) for v in self.state.values()), key=lambda r: r["createdAt"])
+            return sorted((copy.deepcopy(v) for v in self.state.values()), key=lambda r: r["createdAt"])
 
     def GetRemittanceHistory(self, rid):
         with self._lock:
