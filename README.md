@@ -21,43 +21,57 @@ It features:
 ### Installation
 
 1. **Clone the repository**
-   \\\ash
+   ```bash
    git clone https://github.com/Ved-2107/NPCI_LATENCY.git
    cd NPCI_LATENCY
-   \\\
+   ```
 
 2. **Set up the Python Virtual Environment**
-   Navigate into the \hub\ directory and create a virtual environment:
-   \\\ash
+   Navigate into the `hub` directory and create a virtual environment:
+   ```bash
    cd hub
    python -m venv .venv
-   \\\
+   ```
 
 3. **Activate the Virtual Environment**
-   - **Windows:** \.venv\Scripts\activate\
-   - **Mac/Linux:** \source .venv/bin/activate\
+   - **Windows:** `.venv\Scripts\activate`
+   - **Mac/Linux:** `source .venv/bin/activate`
 
 4. **Install Dependencies**
-   \\\ash
+   ```bash
    pip install -r requirements.txt
-   pip install websockets uvicorn[standard]
-   \\\
+   ```
 
 ### Running the Project
 
 Start the FastAPI orchestrator in in-memory mode:
 
 **Windows (PowerShell):**
-\\\powershell
+```powershell
 $env:LEDGER_MODE="memory"
 uvicorn app.main:app --reload --port 8000
-\\\
+```
 
 **Mac/Linux (Bash):**
-\\\ash
+```bash
 export LEDGER_MODE="memory"
 uvicorn app.main:app --reload --port 8000
-\\\
+```
+
+### Running Tests
+
+Run the automated test suite from the repository root:
+
+**Windows (PowerShell):**
+```powershell
+$env:PYTHONPATH="hub"
+pytest hub/tests/
+```
+
+**Mac/Linux (Bash):**
+```bash
+PYTHONPATH=hub pytest hub/tests/
+```
 
 ### Access the Application
 Once the server is running, open your browser and navigate to:
