@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -17,6 +18,15 @@ from .orchestrator import Orchestrator
 from .risk import explain as risk_explain
 
 app = FastAPI(title="RemitChain Hub", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 ledger = make_ledger()
 orch = Orchestrator(ledger)
 UI_DIR = Path(__file__).resolve().parents[2] / "ui"
@@ -26,9 +36,9 @@ class NewRemittance(BaseModel):
     corridor: str
     senderName: str = Field(min_length=2)
     beneficiaryName: str = Field(min_length=2)
-    beneficiaryVpa: str
-    purpose: str
-    amountMinor: int = Field(gt=0)
+    beneficiaryVpa: str = Field(min_length=3)
+    purpose: str = Field(min_length=2)
+    amountMinor: int = Field(gt=0, le=1_000_000_000)
     scenario: str = "happy"
 
 
@@ -58,12 +68,22 @@ def corridors():
 # ── Quote & Pricing ─────────────────────────────────────────────
 
 @app.get("/api/quote")
-def quote(corridor: str, amountMinor: int):
+def quote(
+    corridor: str = Query(..., description="Corridor code e.g. US-IN"),
+    amountMinor: int = Query(..., gt=0, le=1_000_000_000, description="Amount in minor currency units"),
+):
+    if corridor not in fx.CORRIDORS:
+        raise HTTPException(status_code=400, detail=f"Unsupported corridor: {corridor}")
     return guard(orch.preview, corridor, amountMinor)
 
 
 @app.get("/api/compare")
-def cost_compare(corridor: str, amountMinor: int):
+def cost_compare(
+    corridor: str = Query(..., description="Corridor code e.g. US-IN"),
+    amountMinor: int = Query(..., gt=0, le=1_000_000_000, description="Amount in minor currency units"),
+):
+    if corridor not in fx.CORRIDORS:
+        raise HTTPException(status_code=400, detail=f"Unsupported corridor: {corridor}")
     return guard(compare, corridor, amountMinor)
 
 
