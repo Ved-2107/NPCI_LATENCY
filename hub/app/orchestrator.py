@@ -20,11 +20,13 @@ def h(value: str) -> str:
 
 
 class Orchestrator:
-    def __init__(self, ledger):
+    def __init__(self, ledger, step_delay: float = None, expired_delay: float = None):
         self.ledger = ledger
         self.meta = {}       # remittance id -> off-chain PII + scenario
         self.history = {}    # sender hash -> [{ts, amountMinor}]
         self.seen_ben = set()
+        self.step_delay = float(os.environ.get("STEP_DELAY", "0.8")) if step_delay is None else step_delay
+        self.expired_delay = float(os.environ.get("EXPIRED_DELAY", "3.0")) if expired_delay is None else expired_delay
 
     def _emit(self, r: dict, step: str):
         """Emit a real-time event and notification for a state change."""
@@ -85,8 +87,8 @@ class Orchestrator:
             L.VerifyBeneficiary(PAYOUT, rid, upi.name_match(m["beneficiaryName"], registered))
             self._emit(L.GetRemittance(rid), "VERIFY_BENEFICIARY")
         elif st == "VERIFIED":
-            if sc == "quote_expired":
-                time.sleep(3)
+            if sc == "quote_expired" and self.expired_delay > 0:
+                time.sleep(self.expired_delay)
             L.ConfirmFunding(REMITTER, rid, "FUND-" + rid)
             self._emit(L.GetRemittance(rid), "CONFIRM_FUNDING")
         elif st == "FUNDED":
@@ -107,7 +109,8 @@ class Orchestrator:
             if r["status"] in TERMINAL or r["status"] == "HELD":
                 return r
             self.step(rid)
-            time.sleep(0.8)
+            if self.step_delay > 0:
+                time.sleep(self.step_delay)
         return self.ledger.GetRemittance(rid)
 
     def review(self, rid: str, approve: bool) -> dict:

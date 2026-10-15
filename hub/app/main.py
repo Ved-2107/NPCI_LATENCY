@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -110,18 +111,18 @@ def history(rid: str):
 
 
 @app.post("/api/remittances/{rid}/step")
-def step(rid: str):
-    return guard(orch.step, rid)
+async def step(rid: str):
+    return await run_in_threadpool(guard, orch.step, rid)
 
 
 @app.post("/api/remittances/{rid}/run")
-def run(rid: str):
-    return guard(orch.run, rid)
+async def run(rid: str):
+    return await run_in_threadpool(guard, orch.run, rid)
 
 
 @app.post("/api/remittances/{rid}/review")
-def review(rid: str, body: Review):
-    return guard(orch.review, rid, body.approve)
+async def review(rid: str, body: Review):
+    return await run_in_threadpool(guard, orch.review, rid, body.approve)
 
 
 # ── Risk Explainability ─────────────────────────────────────────
