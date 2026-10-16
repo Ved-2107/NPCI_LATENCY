@@ -25,6 +25,8 @@ jobs:
           pip install -r hub/requirements-dev.txt
 
       - name: Run Pytest Suite with Coverage
+        env:
+          PYTHONPATH: hub
         run: |
           pytest hub/tests/ -v --cov=hub/app --cov-report=term-missing
 
@@ -42,6 +44,7 @@ jobs:
       - name: Run Go Unit Tests
         run: |
           cd chaincode/remit
+          go mod tidy
           go test -v ./...
 
   docker-build:
@@ -51,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: actions/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
         run: |
